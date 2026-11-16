@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hướng dẫn Xếp giờ HIS</title>
+<style>
+  :root { --ink: #13201d; --muted: #586a65; --line: #d3dcd9; --accent: #0b6e5f; --soft: #eef4f2; --warn-bg: #fbefbf; --warn-ink: #735400; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.55 "Segoe UI", system-ui, Arial, sans-serif; color: var(--ink); background: #fff; }
+  main { max-width: 820px; margin: 0 auto; padding: 24px 20px 48px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 28px 0 8px; padding-top: 14px; border-top: 1px solid var(--line); }
+  p { margin: 0 0 8px; }
+  .muted { color: var(--muted); }
+  ol, ul { margin: 0 0 8px; padding-left: 22px; }
+  li { margin-bottom: 4px; }
+  b.k { background: var(--soft); border: 1px solid var(--line); border-radius: 4px; padding: 0 6px; font-weight: 600; white-space: nowrap; }
+  .note { background: var(--warn-bg); color: var(--warn-ink); border-radius: 6px; padding: 10px 12px; margin: 8px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 4px 0 8px; font-size: 14px; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--soft); font-size: 13px; }
+  @media print { main { padding: 0; } h2 { break-after: avoid; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Hướng dẫn dùng app Xếp giờ HIS</h1>
+  <p class="muted">Bản 0.17, viết ngày 17/11/2026. Dùng cho màn Nội trú › Quản lý phẫu thuật thủ thuật của VNPT HIS.</p>
+  <div class="note">Lúc viết hướng dẫn này, việc bấm "Lưu đóng" thật trên HIS chưa được thử. Lần điền đầu tiên hãy chọn "Điền thử 1 ca" và tự kiểm tra phiếu đó trên HIS trước khi điền cả loạt.</div>
+
+  <h2>Thư mục app gồm gì</h2>
+  <table>
+    <tr><th>File</th><th>Để làm gì</th></tr>
+    <tr><td>XepGioHIS.exe</td><td>Bấm đúp để mở app. Nó mở một cửa sổ Chrome riêng vào HIS và gắn nút "Xếp giờ" vào trang.</td></tr>
+    <tr><td>xepgio-helper.js</td><td>Phần app chạy trong trang HIS. App tự tải bản mới của file này mỗi lần mở.</td></tr>
+    <tr><td>xepgio.config.json</td><td>Địa chỉ HIS của bệnh viện và địa chỉ lấy bản mới.</td></tr>
+    <tr><td>version.json</td><td>Số bản đang có trên máy.</td></tr>
+  </table>
+  <p>Các file này phải nằm chung một thư mục. Máy cần Windows 10 trở lên và đã cài Chrome.</p>
+
+  <h2>Lần đầu trên một máy</h2>
+  <ol>
+    <li>Mở Chrome, vào <b>github.com/lebac-svg/xep-gio-his/releases/latest</b>, tải file <b class="k">XepGioHIS.zip</b>. Bấm chuột phải vào file vừa tải, chọn giải nén ra một thư mục cố định, ví dụ trên màn hình chính.</li>
+    <li>Bấm đúp <b class="k">XepGioHIS.exe</b>. Nếu Windows hiện cảnh báo về chương trình lạ, chọn xem thêm thông tin rồi cho chạy.</li>
+    <li>Đăng nhập HIS trong cửa sổ Chrome vừa mở, vào Nội trú › Quản lý phẫu thuật thủ thuật.</li>
+    <li>Bấm nút <b class="k">Xếp giờ</b> ở góc phải dưới, chọn ngày, bấm <b class="k">Tải danh sách</b>. Bảng của app chiếm nửa phải màn hình; bấm <b class="k">Mở rộng</b> để xem toàn màn hình, <b class="k">Thu gọn</b> để chỉ còn một thanh nhỏ ở góc.</li>
+    <li>Vào thẻ <b class="k">Cài đặt</b> và <b class="k">Chấm công</b> để xem lại: nhân viên và tài khoản HIS, ai có chứng chỉ gì, ưu tiên, thời gian thủ thuật, máy đang dùng. Bấm <b class="k">Lấy danh sách máy từ HIS</b> nếu thiếu máy, rồi tích những máy khoa thực sự dùng.</li>
+  </ol>
+  <p class="muted">Cài đặt được lưu trên chính máy đó. Muốn chuyển sang máy khác thì chép đoạn chữ ở mục "File cài đặt dùng chung" trong thẻ Cài đặt.</p>
+
+  <h2>Tự cập nhật</h2>
+  <ul>
+    <li>Mỗi lần bấm đúp <b class="k">XepGioHIS.exe</b>, app tự xem trên GitHub có bản mới không. Có thì tải về, kiểm tra file tải đủ và đúng rồi mới thay, sau đó mới mở Chrome. Cửa sổ nhỏ của app ghi "Đã cập nhật từ bản ... lên bản ...", tên cửa sổ hiện số bản đang chạy.</li>
+    <li>Máy không vào được GitHub thì app báo "Không kiểm tra được bản mới" và chạy bản đang có.</li>
+    <li>Muốn lấy bản mới khi app đang mở: bấm Tắt app rồi mở lại.</li>
+    <li>Bản trước được giữ lại cạnh đó với tên <b>xepgio-helper.js.truoc</b>. Nếu bản mới có lỗi, đổi tên file này thành xepgio-helper.js và xóa dòng "update" trong xepgio.config.json để tạm dừng cập nhật.</li>
+    <li>Riêng file XepGioHIS.exe không tự thay. Khi có file chạy mới, cửa sổ nhỏ của app sẽ báo và ghi địa chỉ để tải lại gói.</li>
+    <li>Cài đặt của khoa (nhân viên, chứng chỉ, máy) nằm trong Chrome của app trên từng máy, cập nhật app không làm mất.</li>
+  </ul>
+
+  <h2>Mỗi ngày</h2>
+  <ol>
+    <li>Mở app, đăng nhập HIS, bấm <b class="k">Xếp giờ</b> rồi <b class="k">Tải danh sách</b> của ngày hôm đó.</li>
+    <li>Thẻ Chấm công: tích ai làm sáng, ai làm chiều.</li>
+    <li>Thẻ Chạy hằng ngày, Bước 1: nếu có phiếu xanh do sao phiếu, bấm <b class="k">Gỡ xanh</b> và xác nhận. Chỉ làm bước này trước khi cập nhật thủ thuật của ngày.</li>
+    <li>Thêm chặn giờ nếu cần: người bệnh đi chẩn đoán hình ảnh, người bệnh ra viện. Bác sĩ khám người bệnh mới được app tự chặn.</li>
+    <li>Bước 2: bấm <b class="k">Xếp giờ</b>, xem Bảng giờ để duyệt. Ca báo đỏ có ghi lý do.</li>
+    <li>Bước 3: bấm <b class="k">Điền vào HIS</b> và xác nhận. App chỉ điền các ca đã qua giờ kết thúc.</li>
+    <li>Bước 4: bấm <b class="k">Kiểm tra trùng</b> để soát lại.</li>
+    <li>Thẻ <b class="k">Danh sách</b>: xem mọi thủ thuật của ngày trong một bảng, tìm theo tên, lọc theo trạng thái, xếp theo người bệnh, giờ làm hoặc người làm. Thẻ này chỉ để xem, không tải file.</li>
+  </ol>
+
+  <h2>Buổi chiều và cuối tuần</h2>
+  <ul>
+    <li>Sau lần điền đầu tiên thành công trên máy, ô <b class="k">Tự điền tiếp khi ca qua giờ</b> sẽ hiện ra. Để ô này tích thì app tự điền từng ca khi qua giờ kết thúc.</li>
+    <li>Để yên thẻ của app. Làm việc HIS của bạn ở thẻ khác trong cùng cửa sổ (Ctrl+T). Tên thẻ của app hiện "Xếp giờ đang chạy, còn N ca".</li>
+    <li>Đừng đăng nhập cùng tài khoản HIS ở máy khác trong lúc app chạy, vì HIS sẽ đẩy phiên ở máy này ra.</li>
+    <li>Cuối tuần chỉ làm buổi sáng: xếp giờ, điền các ca sáng, để ô tự điền đang tích, thu nhỏ cửa sổ rồi về. Dặn người trực đừng đóng cửa sổ đó.</li>
+    <li>Người bệnh ra viện hoặc có chỉ định thêm: vào thẻ Chia giờ người bệnh, bấm <b class="k">Chạy riêng</b> ở dòng người đó.</li>
+  </ul>
+
+  <h2>Khi app dừng hoặc báo lỗi</h2>
+  <table>
+    <tr><th>Hiện tượng</th><th>Cách xử lý</th></tr>
+    <tr><td>Nhật ký ghi "HIS từ chối" kèm một câu thông báo</td><td>Đó là nguyên văn thông báo của HIS cho ca đó. Sửa theo thông báo rồi bấm Điền vào HIS để chạy tiếp.</td></tr>
+    <tr><td>"HIS không trả về dữ liệu" hoặc trang về màn đăng nhập</td><td>Phiên đăng nhập đã hết hoặc tài khoản được đăng nhập ở nơi khác. Đăng nhập lại, tải danh sách, bấm Điền vào HIS. Bảng giờ đã xếp được giữ lại.</td></tr>
+    <tr><td>"chưa có tài khoản HIS của người làm"</td><td>Thẻ Chấm công, bấm Cập nhật danh sách, gõ tên người đó và chọn đúng tài khoản.</td></tr>
+    <tr><td>"mã máy không có trong danh sách của HIS"</td><td>Thẻ Cài đặt, bảng Thủ thuật và máy: bỏ tích máy đó hoặc lấy lại danh sách máy từ HIS, rồi xếp giờ lại.</td></tr>
+    <tr><td>Cửa sổ bị đóng hoặc máy bị tắt</td><td>Mở lại app, đăng nhập, tải danh sách ngày đó. App lấy lại bảng giờ cũ và điền tiếp.</td></tr>
+    <tr><td>Bấm đúp file chạy mà không thấy gì, hoặc cửa sổ nhỏ báo lỗi</td><td>Kiểm tra máy đã cài Chrome và các file nằm chung thư mục. Nếu vẫn không được, có thể máy đang chặn loại chương trình này.</td></tr>
+  </table>
+
+  <h2>Những điều app không làm</h2>
+  <ul>
+    <li>Không ghi hoàn thành cho ca chưa qua giờ kết thúc.</li>
+    <li>Không gỡ và không điền thủ thuật sắc thuốc, vì HIS tự cập nhật.</li>
+    <li>Không xếp ca cho người không được tích chứng chỉ, không đi làm buổi đó, hoặc chứng chỉ đã hết hạn.</li>
+    <li>Không ghi gì vào HIS khi chưa có lần bấm xác nhận của người dùng, trừ chế độ tự điền mà người dùng đã bật.</li>
+    <li>Không lưu mật khẩu và không gửi dữ liệu ra ngoài máy. Việc cập nhật chỉ tải file của app từ GitHub về.</li>
+  </ul>
+</main>
+</body>
+</html>

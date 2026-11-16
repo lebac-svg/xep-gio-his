@@ -1,0 +1,1338 @@
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>HIS mô phỏng xếp giờ</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap">
+<style>
+/* Bố cục: một cột. Thanh thẻ chọn màn của app ở trên, màn HIS giả luôn nằm dưới cùng; form HIS bật lên trên khi cập nhật. */
+:root {
+  --bg: #f1f5f4; --surface: #ffffff; --sunk: #e8eeec; --ink: #13201d; --muted: #586a65; --line: #d3dcd9;
+  --accent: #0b6e5f; --accent-ink: #ffffff; --accent-soft: #cfe8e2;
+  --xanh-bg: #dcf2e2; --xanh-ink: #1a6431; --vang-bg: #fbefbf; --vang-ink: #735400;
+  --do-bg: #fbe0db; --do-ink: #9c2717; --info-bg: #e0ebfb; --info-ink: #1b4b8c;
+  --font: "Be Vietnam Pro", "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+  --r: 8px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1514; --surface: #18211f; --sunk: #121a18; --ink: #e3ebe9; --muted: #98aaa5; --line: #2c3936;
+  --accent: #55c7b1; --accent-ink: #05201b; --accent-soft: #1d423b;
+  --xanh-bg: #173924; --xanh-ink: #8edba5; --vang-bg: #3e340f; --vang-ink: #ebd27c;
+  --do-bg: #45201a; --do-ink: #f2a99e; --info-bg: #1a2b46; --info-ink: #9fc2f3; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0f1514; --surface: #18211f; --sunk: #121a18; --ink: #e3ebe9; --muted: #98aaa5; --line: #2c3936;
+  --accent: #55c7b1; --accent-ink: #05201b; --accent-soft: #1d423b;
+  --xanh-bg: #173924; --xanh-ink: #8edba5; --vang-bg: #3e340f; --vang-ink: #ebd27c;
+  --do-bg: #45201a; --do-ink: #f2a99e; --info-bg: #1a2b46; --info-ink: #9fc2f3; color-scheme: dark }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 14px; line-height: 1.5; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 16px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 16px; }
+h1 { font-size: 22px; line-height: 1.25; margin: 0; font-weight: 700; text-wrap: balance; }
+h2 { font-size: 16px; margin: 0; font-weight: 600; }
+h3 { font-size: 14px; margin: 0; font-weight: 600; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.top { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-end; justify-content: space-between; }
+.top .lead { max-width: 62ch; }
+.fake { display: inline-block; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--vang-ink); background: var(--vang-bg); padding: 2px 8px; border-radius: 4px; margin-bottom: 6px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.between { justify-content: space-between; }
+.col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.gap8 { gap: 8px; }
+
+.tabs { display: flex; gap: 4px; overflow-x: auto; border-bottom: 1px solid var(--line); }
+.tabs button { border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: none; padding: 8px 12px; white-space: nowrap; color: var(--muted); font-weight: 500; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+.tabs .cnt { font-size: 11px; background: var(--do-bg); color: var(--do-ink); border-radius: 999px; padding: 0 6px; margin-left: 4px; }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); min-width: 0; }
+.panel > header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.panel .body { padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+.his > header { background: var(--sunk); border-radius: var(--r) var(--r) 0 0; }
+
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.step { border: 1px solid var(--line); border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.step .n { font-size: 12px; font-weight: 600; color: var(--accent); letter-spacing: .04em; text-transform: uppercase; }
+
+button, select, input, textarea { font: inherit; color: inherit; }
+button { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 6px 12px; cursor: pointer; font-weight: 500; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button.small { padding: 2px 8px; font-size: 12px; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+select, input[type="time"], input[type="number"], input[type="text"], input[type="date"], textarea { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 5px 8px; max-width: 100%; }
+input[type="number"] { width: 72px; }
+td select, td input[type="text"], td input[type="date"] { padding: 2px 6px; }
+:is(button, select, input, textarea, tr[tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+label { display: inline-flex; gap: 6px; align-items: center; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.tile { background: var(--sunk); border-radius: 6px; padding: 8px 12px; }
+.tile b { display: block; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.tile span { font-size: 12px; color: var(--muted); }
+.tile.bad b { color: var(--do-ink); }
+.tile.good b { color: var(--xanh-ink); }
+
+.scroll { overflow: auto; border: 1px solid var(--line); border-radius: 6px; max-height: 460px; }
+.scroll.tall { max-height: none; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+thead th { position: sticky; top: 0; background: var(--sunk); font-weight: 600; font-size: 12px; z-index: 1; }
+tr.grp td { background: var(--sunk); font-weight: 600; }
+tr.sum td { color: var(--muted); font-size: 12px; }
+td.c, th.c { text-align: center; }
+td.wrapcell { white-space: normal; min-width: 220px; }
+td.dsname { white-space: normal; min-width: 150px; max-width: 260px; }
+.his tbody tr { cursor: pointer; }
+.his tr.xanh td { background: var(--xanh-bg); }
+.his tr.vang td { background: var(--vang-bg); }
+.his tr.sel td { box-shadow: inset 0 2px 0 var(--accent), inset 0 -2px 0 var(--accent); }
+.old { color: var(--muted); font-style: italic; }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.pill.xanh { background: var(--xanh-bg); color: var(--xanh-ink); }
+.pill.vang { background: var(--vang-bg); color: var(--vang-ink); }
+.pill.do { background: var(--do-bg); color: var(--do-ink); }
+.pill.info { background: var(--info-bg); color: var(--info-ink); }
+.his .pill { border: 1px solid currentColor; }
+.tag button { border: 0; background: none; padding: 0 0 0 4px; font-size: 13px; line-height: 1; color: var(--do-ink); }
+.tag { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; background: var(--surface); }
+.sticky1 td:first-child, .sticky1 th:first-child { position: sticky; left: 0; background: var(--surface); z-index: 1; }
+.sticky1 thead th:first-child { background: var(--sunk); z-index: 2; }
+.empty { padding: 24px 16px; text-align: center; color: var(--muted); white-space: normal; }
+.note { background: var(--accent-soft); border-radius: 6px; padding: 10px 12px; }
+.note.bad { background: var(--do-bg); color: var(--do-ink); }
+.note.good { background: var(--xanh-bg); color: var(--xanh-ink); }
+.note.warn { background: var(--vang-bg); color: var(--vang-ink); }
+.log { font-size: 12px; max-height: 180px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; background: var(--sunk); font-variant-numeric: tabular-nums; }
+.log div { padding: 1px 0; overflow-wrap: anywhere; }
+details { font-size: 13px; }
+summary { cursor: pointer; color: var(--accent); font-weight: 500; }
+.how { margin: 6px 0 0; padding-left: 18px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+.fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.fields label { flex-direction: column; align-items: stretch; gap: 4px; font-size: 12px; color: var(--muted); }
+.fields label > * { font-size: 14px; color: var(--ink); }
+
+/* Thanh thời gian */
+.tlwrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; }
+.tl { display: grid; grid-template-columns: 132px max-content; font-size: 12px; font-variant-numeric: tabular-nums; }
+.tl .lname { position: sticky; left: 0; background: var(--surface); z-index: 2; padding: 0 8px; display: flex; align-items: center; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tl .track { position: relative; height: 30px; border-bottom: 1px solid var(--line); background-image: linear-gradient(to right, var(--line) 1px, transparent 1px); }
+.tl .axis { height: 22px; background-image: none; }
+.tl .axis span { position: absolute; top: 3px; transform: translateX(-50%); color: var(--muted); font-size: 11px; }
+.tl .off { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(135deg, var(--sunk) 0 4px, transparent 4px 8px); }
+.tl .blk { position: absolute; top: 2px; bottom: 2px; background: repeating-linear-gradient(45deg, var(--muted) 0 2px, transparent 2px 5px); border: 1px solid var(--muted); border-radius: 3px; opacity: .7; }
+.tl .bar { position: absolute; top: 6px; height: 18px; background: var(--accent); color: var(--accent-ink); border-radius: 4px; overflow: hidden; outline: 2px solid var(--surface); cursor: default; }
+.tl .bar span { padding-left: 4px; font-size: 11px; line-height: 18px; font-weight: 600; }
+.tl .bar.plan { background: var(--accent-soft); color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.tl .bar.bad { outline: 2px solid var(--do-ink); }
+#tip { position: fixed; z-index: 60; pointer-events: none; background: var(--ink); color: var(--bg); padding: 4px 8px; border-radius: 4px; font-size: 12px; max-width: 320px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); }
+.legend b { display: inline-block; width: 22px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+
+.modal { position: fixed; inset: 0; background: rgba(0, 0, 0, .45); display: flex; align-items: center; justify-content: center; z-index: 50; padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+.dlg { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); width: min(560px, 100%); max-height: 100%; overflow: auto; padding: 16px; }
+.dlg > div { display: flex; flex-direction: column; gap: 12px; }
+.err { color: var(--do-ink); background: var(--do-bg); border-radius: 6px; padding: 8px 10px; }
+#cfList { margin: 0; padding-left: 18px; max-height: 160px; overflow: auto; }
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <div class="lead">
+      <span class="fake">Bản mô phỏng · dữ liệu giả</span>
+      <h1>Xếp giờ thủ thuật trên HIS mô phỏng</h1>
+      <p class="muted">Trang này không nối với HIS thật. Người bệnh, nhân viên và phiếu đều là giả, ngày chạy là 17/11/2026.</p>
+    </div>
+    <div class="row">
+      <label for="nowInput">Giờ hiện tại (giả lập)</label>
+      <input type="time" id="nowInput" value="12:05">
+      <button id="btnReset" type="button">Tạo lại dữ liệu</button>
+    </div>
+  </div>
+
+  <!-- APP-HTML-START -->
+  <div class="tabs" role="tablist" id="tabs">
+    <button type="button" role="tab" data-tab="run">Chạy hằng ngày</button>
+    <button type="button" role="tab" data-tab="bn">Chia giờ người bệnh</button>
+    <button type="button" role="tab" data-tab="trung">Lọc trùng<span class="cnt" id="cntTrung" hidden></span></button>
+    <button type="button" role="tab" data-tab="lam">Thời gian làm</button>
+    <button type="button" role="tab" data-tab="ds">Danh sách</button>
+    <button type="button" role="tab" data-tab="cc">Chấm công</button>
+    <button type="button" role="tab" data-tab="cd">Cài đặt</button>
+  </div>
+
+  <!-- ===== Chạy hằng ngày ===== -->
+  <section class="panel" id="tab-run">
+    <div class="body">
+      <div class="tiles" id="tiles"></div>
+      <div class="note warn" id="dirtyNote" hidden>Chấm công, chặn giờ hoặc cài đặt đã đổi sau lần xếp gần nhất. Bấm Xếp giờ để tính lại.</div>
+      <div class="note" id="roNote" hidden>Bản này chỉ đọc số liệu từ HIS: xếp giờ và soát trùng được, chưa gỡ xanh và chưa điền vào HIS.</div>
+      <div class="steps">
+        <div class="step"><span class="n">Bước 1</span><h3>Gỡ xanh phiếu sao</h3><p class="muted" id="goInfo"></p><div class="row"><button id="btnGoAll" type="button">Gỡ xanh</button></div></div>
+        <div class="step"><span class="n">Bước 2</span><h3>Xếp giờ cả khoa</h3><p class="muted">App tính giờ làm, người làm và máy cho mọi phiếu vàng của ngày. Kết quả hiện ở Bảng giờ để duyệt bên dưới, chưa ghi gì vào HIS.</p><p class="muted" id="ccInfo"></p><div class="row"><button id="btnPlan" type="button" class="primary">Xếp giờ</button></div>
+          <details><summary>Cách app xếp giờ</summary><ul class="how">
+            <li>Ca đã xanh trên HIS được giữ nguyên giờ.</li>
+            <li>Mỗi phiếu vàng được đặt vào giờ sớm nhất mà người bệnh, người làm và máy đều trống, sau giờ chỉ định 5 phút và trong giờ làm việc.</li>
+            <li>Người làm được chọn trong những người có chứng chỉ và đi làm buổi đó: ưu tiên 1 trước, rồi đến người đang ít ca hơn.</li>
+            <li>Người làm chỉ bận phần trực tiếp làm (ví dụ 5 phút đầu của điện châm). Người bệnh và máy bận cả ca.</li>
+            <li>Mỗi người bệnh có ca ở cả buổi sáng và buổi chiều.</li>
+            <li>Ca không xếp được thì ghi rõ lý do ở cột Trạng thái.</li>
+          </ul></details></div>
+        <div class="step"><span class="n">Bước 3</span><h3>Điền vào HIS</h3><p class="muted">Điền các ca đã qua giờ kết thúc; app hỏi lại trước khi ghi. Ca ghi đè giờ cũ thì nhật ký giữ lại giá trị cũ.</p>
+          <div class="row"><button id="btnFill" type="button" class="primary">Điền vào HIS</button><button id="btnStop" type="button" disabled>Dừng</button>
+            <select id="speed" aria-label="Tốc độ điền"><option value="0">Nhanh</option><option value="320">Chậm, xem từng bước</option></select></div>
+          <label for="autoFill"><input type="checkbox" id="autoFill" checked> Tự điền tiếp khi ca qua giờ</label>
+          <p class="muted" id="autoNote" hidden></p></div>
+        <div class="step"><span class="n">Bước 4</span><h3>Kiểm tra trùng</h3><p class="muted" id="ckInfo">Soát mọi ca đã lưu và ca dự kiến. Bấm sau khi thêm chặn giờ hoặc có ca mới.</p>
+          <div class="row"><button id="btnCheck" type="button">Kiểm tra trùng</button><button id="btnFix" type="button">Tự sắp xếp lại</button></div></div>
+      </div>
+
+      <div class="note warn" id="goAsk" hidden></div>
+      <div class="note warn" id="fillAsk" hidden></div>
+      <div class="col gap8" id="sotBox" hidden><h3 id="sotTitle"></h3><div class="scroll" style="max-height:220px"><table id="sotTable"></table></div></div>
+
+      <div class="col gap8">
+        <div class="row between"><h3>Chặn giờ trong ngày</h3><span class="muted">Dòng "tự động" là bác sĩ khám người bệnh mới vào trong ngày</span></div>
+        <div class="scroll tall"><table id="blocks"></table></div>
+        <div class="row">
+          <select id="bkKind" aria-label="Loại chặn"><option value="perf">Chặn người làm</option><option value="bn">Chặn người bệnh</option><option value="rv">Ra viện, xử trí</option></select>
+          <select id="bkWho" aria-label="Người bị chặn"></select>
+          <label for="bkS">Từ <input type="time" id="bkS" value="08:00"></label>
+          <label for="bkE" id="bkELabel">Đến <input type="time" id="bkE" value="08:10"></label>
+          <button id="bkAdd" type="button">Thêm chặn giờ</button>
+        </div>
+      </div>
+
+      <div class="col gap8">
+        <div class="row between"><h3>Bảng giờ để duyệt</h3>
+          <div class="row"><select id="planPerf" aria-label="Lọc theo người làm"></select>
+            <select id="planSt" aria-label="Lọc theo trạng thái"><option value="">Mọi trạng thái</option><option value="bad">Cần xem lại</option><option value="plan">Dự kiến, chưa điền</option></select></div></div>
+        <div class="scroll"><table id="plan"></table></div>
+      </div>
+
+      <div class="col gap8"><h3>Nhật ký</h3><div class="log" id="log" aria-live="polite"></div></div>
+    </div>
+  </section>
+
+  <!-- ===== Chia giờ người bệnh ===== -->
+  <section class="panel" id="tab-bn" hidden>
+    <div class="body">
+      <div class="row between"><p class="muted" style="max-width:62ch">Giờ của từng người bệnh, gồm ca đã lưu trên HIS và ca dự kiến. Chạy riêng nghĩa là app chỉ xếp giờ cho những người bệnh bạn chọn, ví dụ người mới vào hoặc có chỉ định thêm; ca của người khác giữ nguyên.</p>
+        <div class="row"><input type="text" id="bnSearch" placeholder="Tìm tên hoặc mã bệnh án" aria-label="Tìm người bệnh"><button id="btnRunSel" type="button" class="primary">Chạy riêng cho người đã tích</button></div></div>
+      <div class="scroll tall"><table id="bnTable"></table></div>
+    </div>
+  </section>
+
+  <!-- ===== Lọc trùng ===== -->
+  <section class="panel" id="tab-trung" hidden>
+    <div class="body">
+      <div class="row between"><div class="tiles" id="trungTiles" style="flex:1"></div>
+        <div class="row"><select id="trungType" aria-label="Lọc loại lỗi"></select><button id="btnCheck2" type="button">Kiểm tra trùng</button><button id="btnFix2" type="button" class="primary">Tự sắp xếp lại</button></div></div>
+      <div class="scroll"><table id="trungTable"></table></div>
+    </div>
+  </section>
+
+  <!-- ===== Thời gian làm ===== -->
+  <section class="panel" id="tab-lam" hidden>
+    <div class="body">
+      <h3>Thanh thời gian</h3>
+      <div class="row between">
+        <div class="legend">
+          <span><b style="background:var(--accent)"></b>Đã lưu trên HIS</span>
+          <span><b style="background:var(--accent-soft);box-shadow:inset 0 0 0 1.5px var(--accent)"></b>Dự kiến, chưa điền</span>
+          <span><b style="outline:2px solid var(--do-ink)"></b>Có trùng</span>
+          <span><b style="background:repeating-linear-gradient(45deg,var(--muted) 0 2px,transparent 2px 5px)"></b>Giờ chặn</span>
+        </div>
+        <div class="row"><input type="text" id="tlSearch" placeholder="Tìm tên" aria-label="Tìm trên thanh thời gian"><select id="tlMode" aria-label="Xem theo"><option value="perf">Theo người làm</option><option value="bn">Theo người bệnh</option><option value="may">Theo máy</option></select></div>
+      </div>
+      <div class="tlwrap"><div class="tl" id="tl"></div></div>
+      <p class="muted" id="tlInfo">Xem theo người làm: mỗi ô là quãng người đó trực tiếp làm. Xem theo người bệnh hoặc máy: mỗi ô là cả ca. Rê chuột hoặc bấm vào ô để xem chi tiết.</p>
+    
+      <div class="row between"><div><h3>Bảng chi tiết từng ca</h3><p class="muted">Từng ca của từng người làm trong ngày, kèm tổng số ca và số phút trực tiếp làm. Bấm tên một người trên thanh thời gian để chỉ xem người đó.</p></div>
+        <div class="row"><select id="lamPerf" aria-label="Lọc người làm"></select><select id="lamGrp" aria-label="Lọc thủ thuật"></select></div></div>
+      <div class="scroll"><table id="lamTable"></table></div>
+    </div>
+  </section>
+
+  <!-- ===== Danh sách ===== -->
+  <section class="panel" id="tab-ds" hidden>
+    <div class="body">
+      <div class="row between"><p class="muted" id="dsInfo" style="max-width:62ch"></p>
+        <div class="row"><input type="text" id="dsSearch" placeholder="Tìm người bệnh, người làm, thủ thuật" aria-label="Tìm trong danh sách">
+          <select id="dsSt" aria-label="Lọc trạng thái"><option value="">Mọi trạng thái</option><option value="his">Đã lưu trên HIS</option><option value="plan">Dự kiến, chưa điền</option><option value="none">Chưa có giờ</option></select>
+          <select id="dsSort" aria-label="Sắp xếp"><option value="bn">Xếp theo người bệnh</option><option value="gio">Xếp theo giờ làm</option><option value="perf">Xếp theo người làm</option></select></div></div>
+      <div class="scroll tall"><table id="dsTable"></table></div>
+    </div>
+  </section>
+
+  <!-- ===== Chấm công ===== -->
+  <section class="panel" id="tab-cc" hidden>
+    <div class="body">
+      <div class="row between"><h3 id="ccTitle">Chấm công</h3>
+        <div class="row"><button id="ccEdit" type="button">Cập nhật danh sách</button><button id="ccAll" type="button">Tất cả đi làm</button><button id="ccPrev" type="button">Giống hôm qua</button></div></div>
+      <div class="col gap8" id="stMgrCC" hidden></div>
+      <div class="scroll tall"><table id="ccDay"></table></div>
+      <div class="row between"><h3>Đánh trước cả tuần</h3><span class="muted">Cột ghi "ngày chạy" là ngày đang chạy; sửa ở đâu thì bảng kia đổi theo</span></div>
+      <div class="scroll tall"><table id="ccWeek" class="sticky1"></table></div>
+    </div>
+  </section>
+
+  <!-- ===== Cài đặt ===== -->
+  <section class="panel" id="tab-cd" hidden>
+    <div class="body">
+      <div class="col gap8"><h3>Nhân viên</h3><div class="col gap8" id="stMgrCD"></div></div>
+      <div class="col gap8"><h3>Chứng chỉ: ai được làm thủ thuật nào</h3>
+        <p class="muted">Tích ô Có chứng chỉ cho người có chứng chỉ đó, rồi bỏ tích riêng thủ thuật người đó không làm. Chứng chỉ hết hạn trước ngày chạy thì app ngừng xếp nhóm đó.</p>
+        <div class="row" id="certMgr"></div><p class="muted" id="certMsg"></p>
+        <div class="scroll tall"><table id="certTable" class="sticky1"></table></div></div>
+      <div class="col gap8"><h3>Ưu tiên người làm cho từng thủ thuật</h3>
+        <p class="muted">1 là ưu tiên, 2 là thường, 3 là dự phòng. Ô trống là người đó không có chứng chỉ.</p>
+        <div class="scroll tall"><table id="prioTable" class="sticky1"></table></div></div>
+      <div class="col gap8"><div class="row between"><h3>Thủ thuật và máy</h3><div class="row"><span class="muted" id="svStamp"></span><button id="mayFetch" type="button" hidden>Lấy danh sách máy từ HIS</button><button id="svEdit" type="button">Cập nhật</button></div></div>
+        <p class="muted" id="svHelp"></p>
+        <div class="scroll tall"><table id="svcTable"></table></div>
+        <div class="row" id="svFoot" hidden><button id="svAdd" type="button">Thêm thủ thuật</button><span class="muted" id="svMsg"></span></div></div>
+      <div class="col gap8"><h3>Tham số</h3>
+        <div class="fields">
+          <label for="pA0">Ca sáng từ<input type="time" id="pA0"></label><label for="pA1">Ca sáng đến<input type="time" id="pA1"></label>
+          <label for="pB0">Ca chiều từ<input type="time" id="pB0"></label><label for="pB1">Ca chiều đến<input type="time" id="pB1"></label>
+          <label for="pLead">Sau giờ chỉ định (phút)<input type="number" id="pLead" min="0" max="60"></label>
+          <label for="pGapPerf">Người làm nghỉ giữa hai ca (phút)<input type="number" id="pGapPerf" min="0" max="30"></label>
+          <label for="pGapBn">Người bệnh nghỉ giữa hai ca (phút)<input type="number" id="pGapBn" min="0" max="60"></label>
+          <label for="pGapMay">Máy nghỉ giữa hai ca (phút)<input type="number" id="pGapMay" min="0" max="30"></label>
+          <label for="pNew">Chặn bác sĩ khi có người bệnh mới (phút)<input type="number" id="pNew" min="0" max="60"></label>
+          <label for="pSpread">Chia ca<select id="pSpread"><option value="1">Chia cả sáng và chiều</option><option value="0">Xếp sớm nhất có thể</option></select></label>
+        </div></div>
+      <div class="col gap8"><h3>File cài đặt dùng chung</h3>
+        <p class="muted">Sao chép đoạn này để chuyển sang máy khác, hoặc dán vào rồi bấm Nạp.</p>
+        <textarea id="cfgText" rows="4" aria-label="Nội dung cài đặt"></textarea>
+        <div class="row"><button id="cfgCopy" type="button">Sao chép</button><button id="cfgLoad" type="button">Nạp</button><span class="muted" id="cfgMsg"></span></div></div>
+    </div>
+  </section>
+
+  <div id="tip" hidden></div>
+  <!-- APP-HTML-END -->
+
+  <!-- ===== HIS mô phỏng ===== -->
+  <section class="panel his" aria-labelledby="hisTitle">
+    <header>
+      <h2 id="hisTitle">HIS mô phỏng · Quản lý phẫu thuật thủ thuật</h2>
+      <div class="row">
+        <select id="hisFilter" aria-label="Lọc trạng thái phiếu"><option value="">Tất cả phiếu</option><option value="2">Đã gửi phiếu (vàng)</option><option value="3">Đã hoàn thành (xanh)</option></select>
+        <button id="btnCapNhat" type="button">Cập nhật PTTT</button>
+        <button id="btnGo" type="button">Gỡ hoàn thành phiếu</button>
+      </div>
+    </header>
+    <div class="body">
+      <p class="muted" id="hisInfo"></p>
+      <div class="scroll"><table id="hisGrid"></table></div>
+      <p class="muted">Bấm một dòng rồi bấm Cập nhật PTTT để tự điền tay. Phiếu đã gỡ xanh vẫn giữ giờ và người làm cũ (chữ nghiêng) cho đến khi được lưu lại. HIS mô phỏng báo trùng khi cùng một người thực hiện có hai ca chồng giờ tính trên cả khoảng bắt đầu đến kết thúc, và cho bấm Đồng ý để lưu tiếp.</p>
+    </div>
+  </section>
+</div>
+
+<div class="modal" id="modal" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+    <div id="formBox">
+      <h2 id="dlgTitle">Cập nhật phẫu thuật thủ thuật</h2>
+      <p id="fInfo" class="muted"></p>
+      <div class="fields">
+        <label for="fStart">Thời gian thực hiện<input type="time" id="fStart"></label>
+        <label for="fEnd">Thời gian kết thúc<input type="time" id="fEnd"></label>
+        <label for="fPerf">Người thực hiện<select id="fPerf"></select></label>
+        <label for="fMay">Mã máy<select id="fMay"></select></label>
+      </div>
+      <p class="err" id="fErr" hidden></p>
+      <div class="row" style="justify-content:flex-end"><button id="fDong" type="button">Đóng</button><button id="fLuu" type="button" class="primary">Lưu đóng</button></div>
+    </div>
+    <div id="cfBox" hidden>
+      <h2>Thông báo</h2>
+      <p id="cfText"></p>
+      <ul id="cfList"></ul>
+      <div class="row" style="justify-content:flex-end"><button id="cfNo" type="button">Hủy</button><button id="cfYes" type="button" class="primary">Đồng ý</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+'use strict';
+
+/* ENGINE-START — bộ xếp giờ, dùng chung cho bản mô phỏng và app thật */
+const X = (function () {
+  const toMin = s => { const m = /(\d{1,2}):(\d{2})/.exec(s || ''); return m ? +m[1] * 60 + +m[2] : null; };
+  const toHM = n => n == null ? '' : String(Math.floor(n / 60)).padStart(2, '0') + ':' + String(n % 60).padStart(2, '0');
+  const rank = (st, gk) => (st.prio && st.prio[gk]) || 2;
+
+  // Sổ ghi các khoảng đã bận của người làm (P:), người bệnh (B:), máy (M:). Khoảng chặn không cộng thêm thời gian nghỉ.
+  function makeBook(blocks) {
+    const book = new Map();
+    const get = k => { let v = book.get(k); if (!v) book.set(k, v = []); return v; };
+    const bk = {
+      clash: (k, s, e, gap) => get(k).some(iv => { const g = iv[2] ? 0 : gap; return s < iv[1] + g && iv[0] < e + g; }),
+      add: (k, s, e, isBlock) => { get(k).push([s, e, isBlock ? 1 : 0]); }
+    };
+    (blocks || []).forEach(b => bk.add((b.kind === 'perf' ? 'P:' : 'B:') + b.who, b.s, b.e, true));
+    return bk;
+  }
+
+  // Giờ sớm nhất một người làm nhận được ca t. Người làm chỉ bận phần trực tiếp làm (busy), người bệnh và máy bận cả ca.
+  function earliest(t, st, cfg, bk, relax) {
+    relax = relax || {};
+    const idx = cfg.shifts.map((_, i) => i);
+    if (cfg.spread && t.pref != null) idx.sort((a, b) => (a === t.pref ? 0 : 1) - (b === t.pref ? 0 : 1) || a - b);
+    for (const i of idx) {
+      if (!st.on[i]) continue;
+      const a = cfg.shifts[i][0], b = cfg.shifts[i][1];
+      for (let s = Math.max(a, (t.order || 0) + cfg.lead); s + t.dur <= b; s++) {
+        if (!relax.perf && bk.clash('P:' + st.id, s, s + t.busy, cfg.gapPerf)) continue;
+        if (!relax.bn && bk.clash('B:' + t.bn, s, s + t.dur, cfg.gapBn)) continue;
+        let may = null;
+        if (t.machines && !relax.may) { may = t.machines.find(m => !bk.clash('M:' + m, s, s + t.dur, cfg.gapMay)); if (!may) continue; }
+        return { s, may, shift: i };
+      }
+    }
+    return null;
+  }
+  const cands = (t, staff) => t.pinPerf ? staff.filter(x => x.id === t.pinPerf) : staff.filter(st => st.can[t.gk]);
+
+  // Lý do một ca không xếp được, để người dùng biết phải gỡ ở đâu.
+  function explain(t, staff, cfg, bk) {
+    const all = cands(t, staff);
+    if (!all.length) return 'Không ai có chứng chỉ còn hạn cho thủ thuật này';
+    const on = all.filter(st => st.on.some(Boolean));
+    if (!on.length) return t.pinPerf ? 'Người làm đã chọn không đi làm hôm nay' : 'Người có chứng chỉ đều nghỉ hôm nay';
+    if (t.machines && !t.machines.length) return 'Không có máy nào dùng được hôm nay';
+    const lastEnd = Math.max.apply(null, cfg.shifts.map(x => x[1]));
+    if ((t.order || 0) + cfg.lead + t.dur > lastEnd) return 'Chỉ định lúc ' + toHM(t.order) + ', không kịp xong trước ' + toHM(lastEnd);
+    const can = r => on.some(st => earliest(t, st, cfg, bk, r));
+    if (can({ bn: true })) return 'Người bệnh không còn khoảng trống phù hợp';
+    if (can({ may: true })) return 'Máy đã kín lịch';
+    if (can({ perf: true })) return 'Người làm có chứng chỉ đã kín lịch';
+    return 'Người bệnh, người làm và máy đều kín lịch';
+  }
+
+  function pass(tasks, staff, cfg, blocks) {
+    const bk = makeBook(blocks), out = new Map(), load = {};
+    const put = (t, perf, s, e, busyEnd, may) => {
+      if (perf) { bk.add('P:' + perf, s, busyEnd); load[perf] = (load[perf] || 0) + (busyEnd - s); }
+      bk.add('B:' + t.bn, s, e); if (may) bk.add('M:' + may, s, e);
+    };
+    tasks.forEach(t => {
+      if (!t.fixed) return; const f = t.fixed;
+      put(t, f.perf, f.s, f.e, Math.min(f.e, f.s + t.busy), f.may);
+      out.set(t.id, { s: f.s, e: f.e, may: f.may || null, perf: f.perf || null, status: 'fixed', note: '' });
+    });
+    tasks.forEach(t => {
+      if (t.fixed) return;
+      if (!(t.dur > 0)) { out.set(t.id, { status: 'stuck', note: 'Chưa có quy tắc thời gian cho thủ thuật này' }); return; }
+      let found = [];
+      cands(t, staff).forEach(st => { const r = earliest(t, st, cfg, bk); if (r) found.push({ st, s: r.s, may: r.may, shift: r.shift }); });
+      if (!found.length) { out.set(t.id, { status: 'stuck', note: explain(t, staff, cfg, bk) }); return; }
+      if (cfg.spread && t.pref != null && found.some(f => f.shift === t.pref)) found = found.filter(f => f.shift === t.pref);
+      const best = Math.min.apply(null, found.map(f => f.s));
+      const ok = found.filter(f => f.s <= best + cfg.tol);   // người ưu tiên hơn được chọn nếu chỉ chậm hơn tối đa tol phút
+      ok.sort((x, y) => rank(x.st, t.gk) - rank(y.st, t.gk) || (load[x.st.id] || 0) - (load[y.st.id] || 0) || x.s - y.s);
+      const c = ok[0];
+      put(t, c.st.id, c.s, c.s + t.dur, c.s + t.busy, c.may);
+      out.set(t.id, { s: c.s, e: c.s + t.dur, may: c.may, perf: c.st.id, status: 'planned', note: '' });
+    });
+    return tasks.map(t => Object.assign({}, t, out.get(t.id)));
+  }
+
+  // Thứ tự xếp: xoay vòng theo người bệnh. Đồng thời gợi ý buổi cho từng ca để mỗi người bệnh có ca ở cả sáng và chiều.
+  function prepare(tasks, cfg) {
+    const by = new Map();
+    tasks.forEach(t => { if (!by.has(t.bn)) by.set(t.bn, []); by.get(t.bn).push(t); });
+    const groups = [];
+    by.forEach(list => {
+      const todo = list.filter(t => !t.fixed).map(t => Object.assign({}, t)).sort((a, b) => (a.order || 0) - (b.order || 0) || a.id - b.id);
+      if (cfg.spread && cfg.shifts.length === 2 && list.length >= 2) {
+        const mid = cfg.shifts[0][1];
+        const amFixed = list.filter(t => t.fixed && t.fixed.s < mid).length;
+        const needAm = Math.max(0, Math.min(todo.length, Math.round(list.length * 0.56) - amFixed)), needPm = todo.length - needAm;
+        // Người bệnh thứ chẵn làm các ca đầu buổi sáng, thứ lẻ làm các ca đầu buổi chiều, để từng người làm cũng có ca ở cả hai buổi.
+        const flip = by.size > 1 && groups.length % 2 === 1;
+        todo.forEach((t, i) => { t.pref = flip ? (i < needPm ? 1 : 0) : (i < needAm ? 0 : 1); });
+      }
+      if (todo.length) groups.push(todo);
+    });
+    groups.sort((x, y) => (x[0].order || 0) - (y[0].order || 0));
+    const out = []; let more = true;
+    for (let i = 0; more; i++) { more = false; groups.forEach(g => { if (g[i]) { out.push(g[i]); more = true; } }); }
+    return out;
+  }
+
+  // Xếp nhiều lượt: ca bị kẹt ở lượt trước được xếp trước ở lượt sau. Giữ lượt ít ca kẹt nhất.
+  function plan(tasks, staff, cfg, blocks, tries) {
+    const fixed = tasks.filter(t => t.fixed);
+    let order = prepare(tasks, cfg), best = null;
+    for (let k = 0; k < (tries || 6); k++) {
+      const res = pass(fixed.concat(order), staff, cfg, blocks);
+      const stuck = new Set(res.filter(r => r.status === 'stuck').map(r => r.id));
+      if (!best || stuck.size < best.n) best = { res, n: stuck.size };
+      if (!stuck.size) break;
+      order = order.filter(t => stuck.has(t.id)).concat(order.filter(t => !stuck.has(t.id)));
+    }
+    return best.res;
+  }
+
+  // Soát lỗi trên một bảng giờ bất kỳ (đã lưu hoặc dự kiến). Trả về danh sách {type, level, ids, extra}.
+  function check(rows, staff, cfg, blocks) {
+    const out = [], ok = rows.filter(r => r.s != null);
+    const add = (type, level, ids, extra) => out.push({ type, level, ids, extra: extra || '' });
+    const groupBy = key => { const m = new Map(); ok.forEach(r => { const k = key(r); if (!k) return; if (!m.has(k)) m.set(k, []); m.get(k).push(r); }); m.forEach(v => v.sort((a, b) => a.s - b.s || a.e - b.e)); return m; };
+    const sweep = (m, endOf, gap, type) => m.forEach(v => { let last = null; v.forEach(n => {
+      if (last) { const le = endOf(last); if (n.s < le) add(type, 'err', [last.id, n.id]); else if (n.s < le + gap) add(type, 'warn', [last.id, n.id]); }
+      if (!last || endOf(n) > endOf(last)) last = n;
+    }); });
+    sweep(groupBy(r => r.perf), r => Math.min(r.e, r.s + r.busy), cfg.gapPerf, 'perf');
+    sweep(groupBy(r => r.bn), r => r.e, cfg.gapBn, 'bn');
+    sweep(groupBy(r => r.may), r => r.e, cfg.gapMay, 'may');
+    const byId = new Map(staff.map(s => [s.id, s]));
+    ok.forEach(r => {
+      if (r.order != null) { if (r.s < r.order) add('order', 'err', [r.id]); else if (r.s < r.order + cfg.lead) add('order', 'warn', [r.id]); }
+      const si = cfg.shifts.findIndex(sh => r.s >= sh[0] && r.e <= sh[1]);
+      if (si < 0) add('shift', 'err', [r.id]);
+      const st = byId.get(r.perf);
+      if (st) { if (!st.can[r.gk]) add('cert', 'err', [r.id]); if (si >= 0 && !st.on[si]) add('absent', 'err', [r.id]); }
+      if (r.needMay && !r.may) add('nomay', 'err', [r.id]);
+      (blocks || []).forEach(b => {
+        if (b.kind === 'perf' && b.who === r.perf && r.s < b.e && b.s < Math.min(r.e, r.s + r.busy)) add('pblock', 'err', [r.id], b.note);
+        if (b.kind === 'bn' && b.who === r.bn && r.s < b.e && b.s < r.e) add('bblock', 'err', [r.id], b.note);
+      });
+    });
+    return out;
+  }
+  return { toMin, toHM, plan, check, prepare, pass };
+})();
+/* ENGINE-END */
+
+/* CORE-START — phần app dùng chung. Chạy trên HIS mô phỏng lẫn HIS thật qua bộ nối H; $ là hàm tìm phần tử trong vùng giao diện của app. */
+function XepGioCore(H, $) {
+  const hm = X.toHM;
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const fold = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();   // bỏ dấu để tìm tên
+  const eid = s => String(s).replace(/[^A-Za-z0-9_-]/g, c => '_' + c.charCodeAt(0).toString(36));
+  // Thủ thuật (S.groups), loại chứng chỉ (S.certs) và mã máy (S.may) đều là cài đặt, sửa được ở thẻ Cài đặt.
+  // Một dịch vụ trên HIS thuộc thủ thuật nào là do từ khóa (kw): lấy thủ thuật có từ khóa dài nhất nằm trong tên dịch vụ, không phân biệt dấu.
+  let WORK = [];
+  const groupOf = name => { const n = fold(name); let best = null, len = 0; S.groups.forEach(g => (g.kw || []).forEach(k => { const x = fold(k).trim(); if (x && x.length > len && n.indexOf(x) >= 0) { best = g; len = x.length; } })); return best; };
+  const mayList = g => { const a = S.may[g.mk || g.k]; return a && a.length ? a : null; };
+  // Thủ thuật đang dùng: có trong danh sách ngày, đã tích cho ai đó, hoặc do người dùng thêm
+  function refreshWork() { const used = new Set(H.tickets.map(t => (groupOf(t.ten) || {}).k)); WORK = S.groups.filter(g => !g.skip && (g.pin || used.has(g.k) || S.staff.some(p => holds(p, g)))); }
+
+  const S = {};   // cài đặt lâu dài
+  const D = {};   // dữ liệu trong ngày: chấm công, chặn giờ
+  function ensureStaff(st) {
+    st.can = st.can || {}; st.prio = st.prio || {}; st.cc = st.cc || {};
+    S.certs.forEach(c => {
+      const cc = st.cc[c.k] = st.cc[c.k] || { so: '', han: '' };
+      if (cc.co === undefined) {   // chuyển từ cách lưu cũ: coi là có chứng chỉ nếu đang được tích ít nhất một thủ thuật của nó; thủ thuật chưa tích thì ghi rõ là không làm
+        const gs = S.groups.filter(g => !g.skip && g.cert === c.k);
+        cc.co = gs.some(g => st.can[g.k] === true);
+        gs.forEach(g => { if (st.can[g.k] !== true) st.can[g.k] = false; });
+      }
+    });
+    if (!D.on[st.id]) D.on[st.id] = [true, true];
+    if (!D.week[st.id]) D.week[st.id] = [0, 0, 0, 0, 0, 0, 0];
+  }
+  function defaults() {
+    const seed = H.seed();
+    Object.assign(S, { staff: seed.staff, groups: JSON.parse(JSON.stringify(seed.groups)), certs: JSON.parse(JSON.stringify(seed.certs)), may: JSON.parse(JSON.stringify(seed.may || {})), stamp: '', shifts: [[450, 720], [780, 990]], lead: 5, gapPerf: 1, gapBn: 5, gapMay: 1, tol: 15, newBlock: 10, spread: true, mayOff: [] });
+    D.on = seed.on || {}; D.note = {}; D.week = seed.week || {}; D.blocks = []; D.bkSeq = 0;
+    const saved = H.loadSettings ? H.loadSettings() : null;
+    if (saved && saved.S) Object.assign(S, saved.S);
+    if (saved && saved.D) Object.assign(D, saved.D);
+    S.staff.forEach(ensureStaff);
+  }
+  const persist = () => { if (H.saveSettings) H.saveSettings(S, D); };
+  const staffById = id => S.staff.find(s => s.id === id);
+  const staffName = id => { const s = staffById(id); return s ? s.ten : (H.nameOf && H.nameOf(id)) || id || ''; };
+  const expired = (st, cert) => { const h = st.cc[cert] && st.cc[cert].han; return !!h && h < H.runDate; };
+  const nearExp = (st, cert) => { const h = st.cc[cert] && st.cc[cert].han; if (!h || h < H.runDate) return false; return (new Date(h) - new Date(H.runDate)) / 864e5 <= 30; };
+  // Một người làm được thủ thuật khi có chứng chỉ của thủ thuật đó và không bị bỏ tích riêng thủ thuật ấy
+  const holds = (st, g) => !!(st.cc && st.cc[g.cert] && st.cc[g.cert].co) && st.can[g.k] !== false;
+  const canDo = (st, g) => holds(st, g) && !expired(st, g.cert);
+  const staffEng = () => S.staff.map(st => ({ id: st.id, on: (D.on[st.id] || [false, false]).slice(), can: Object.fromEntries(WORK.map(g => [g.k, canDo(st, g)])), prio: st.prio }));
+  const cfg = () => ({ shifts: S.shifts, gapPerf: S.gapPerf, gapBn: S.gapBn, gapMay: S.gapMay, lead: S.lead, tol: S.tol, spread: S.spread });
+  const machinesOf = g => { const a = mayList(g); return a ? a.filter(m => S.mayOff.indexOf(m) < 0) : null; };
+  const byId = id => H.tickets.find(t => t.id === id);
+  const workTickets = () => H.tickets.filter(t => { const g = groupOf(t.ten); return !(g && g.skip); });
+
+  const App = { plan: new Map(), manual: new Map(), filled: new Set(), move: new Set(), skip: new Set(), sel: new Set(), conflicts: null, warn: 0, running: false, stop: false, dirty: false };
+  function resetApp() { Object.assign(App, { plan: new Map(), manual: new Map(), filled: new Set(), move: new Set(), skip: new Set(), sel: new Set(), conflicts: null, warn: 0, dirty: false }); $('#log').innerHTML = ''; }
+  function log(msg) { const d = document.createElement('div'); d.textContent = msg; const el = $('#log'); el.appendChild(d); while (el.childNodes.length > 500) el.removeChild(el.firstChild); el.scrollTop = el.scrollHeight; }
+  function changed() { if (App.running) return; App.conflicts = null; renderAll(); }
+  function dirty() { if (App.plan.size) App.dirty = true; App.conflicts = null; persist(); renderAll(); }
+
+  // Bảng giờ được lưu theo ngày, để đóng cửa sổ rồi mở lại vẫn điền tiếp được đúng bảng cũ
+  const savePlan = () => { if (H.savePlan) H.savePlan({ plan: Array.from(App.plan.values()).filter(r => r.status !== 'fixed'), manual: Array.from(App.manual), skip: Array.from(App.skip) }); };
+  function restorePlan() {
+    const sp = H.loadPlan ? H.loadPlan() : null; if (!sp) return;
+    (sp.plan || []).forEach(r => { const t = byId(r.id); if (!t || (r.status === 'planned' && t.tt === 3)) return; App.plan.set(r.id, Object.assign({}, r, { wait: false })); });
+    App.manual = new Map((sp.manual || []).filter(x => byId(x[0]))); App.skip = new Set((sp.skip || []).filter(id => byId(id)));
+    const n = Array.from(App.plan.values()).filter(r => r.status === 'planned').length;
+    if (n) log('Đã lấy lại bảng giờ xếp từ trước: ' + n + ' ca dự kiến chưa điền.');
+  }
+  const blocksEng = () => D.blocks.map(b => ({ kind: b.kind === 'perf' ? 'perf' : 'bn', who: b.who, s: b.s, e: b.kind === 'rv' ? 1440 : b.e, note: b.note }));
+  function autoBlocks() {   // người bệnh vào viện trong ngày: chặn bác sĩ chỉ định của người đó
+    D.blocks = D.blocks.filter(b => !b.auto);
+    H.pats.forEach(p => { if (p.vao != null && p.bsId) D.blocks.push({ id: ++D.bkSeq, kind: 'perf', who: p.bsId, s: p.vao, e: p.vao + S.newBlock, note: 'Khám ' + p.ten + ' mới vào lúc ' + hm(p.vao), auto: true }); });
+  }
+
+  // scope: null = cả khoa, hoặc Set mã người bệnh để chạy riêng (ca của người khác được giữ nguyên)
+  function buildPlan(scope) {
+    const tasks = [];
+    workTickets().forEach(t => {
+      if (App.skip.has(t.id)) { App.plan.delete(t.id); return; }
+      const g = groupOf(t.ten), old = App.plan.get(t.id);
+      const b = { id: t.id, bn: t.bn, gk: g ? g.k : '?', dur: g ? g.dur : 0, busy: g ? g.busy : 0, machines: g ? machinesOf(g) : null, order: t.cd, pinPerf: App.manual.get(t.id) || null };
+      if (t.tt === 3 && !App.move.has(t.id)) { b.fixed = { s: t.s, e: t.e, may: t.may, perf: t.perf }; b.dur = t.e - t.s; b.busy = Math.min(b.busy || b.dur, b.dur); b.keep = 'his'; }
+      else if (scope && !scope.has(t.bn)) { if (old && old.status === 'planned') { b.fixed = { s: old.s, e: old.e, may: old.may, perf: old.perf }; b.keep = 'plan'; } else return; }
+      tasks.push(b);
+    });
+    const res = X.plan(tasks, staffEng(), cfg(), blocksEng());
+    if (!scope) App.plan = new Map();
+    res.forEach(r => App.plan.set(r.id, { id: r.id, s: r.s, e: r.e, may: r.may, perf: r.perf, status: r.keep === 'plan' ? 'planned' : r.status, note: r.note || '', wait: false }));
+    App.dirty = false; App.conflicts = null; savePlan();
+    return res.filter(r => !r.keep);
+  }
+
+  // Bảng giờ hiện hành: ca dự kiến (chưa điền) nếu có, không thì ca đã lưu trên HIS
+  function curRows() {
+    return workTickets().map(t => {
+      const g = groupOf(t.ten), p = App.plan.get(t.id);
+      const v = p && p.status === 'planned' ? p : t.tt === 3 ? t : null;
+      if (!v || v.s == null) return null;
+      return { id: t.id, t, g, src: v === t ? 'his' : 'plan', s: v.s, e: v.e, perf: v.perf, may: v.may, bn: t.bn, gk: g ? g.k : '?', busy: g ? Math.min(g.busy, v.e - v.s) : v.e - v.s, order: t.cd, needMay: !!(g && mayList(g)) };
+    }).filter(Boolean);
+  }
+  const gLabel = r => r.g ? r.g.label : r.t.ten;
+  const rowLabel = r => `${hm(r.s)}–${hm(r.e)} · ${r.t.tenBN} · ${gLabel(r)} · ${staffName(r.perf)}${r.may ? ' · ' + r.may : ''}${r.src === 'plan' ? ' (dự kiến)' : ''}`;
+  const TYPES = {
+    perf: ['Trùng người làm', 'Người làm nghỉ chưa đủ giữa hai ca'], bn: ['Trùng người bệnh', 'Người bệnh nghỉ chưa đủ giữa hai ca'], may: ['Trùng máy', 'Máy nghỉ chưa đủ giữa hai ca'],
+    order: ['Làm trước giờ chỉ định', 'Chưa đủ thời gian sau giờ chỉ định'], shift: ['Ngoài giờ làm việc'], cert: ['Người làm không có chứng chỉ còn hạn'], absent: ['Người làm không đi làm buổi đó'],
+    nomay: ['Thiếu mã máy'], pblock: ['Đụng giờ chặn của người làm'], bblock: ['Đụng giờ chặn của người bệnh']
+  };
+  const typeName = c => (TYPES[c.type] || [c.type])[c.level === 'warn' ? 1 : 0] || TYPES[c.type][0];
+
+  function runCheck(silent) {
+    App.conflicts = X.check(curRows(), staffEng(), cfg(), blocksEng());
+    const e = App.conflicts.filter(c => c.level === 'err').length, w = App.conflicts.length - e;
+    if (!silent) log(`Kiểm tra trùng: ${e} lỗi, ${w} cảnh báo trên ${curRows().length} ca.`);
+    renderAll(); return e + w;
+  }
+  function runFix() {   // dời ca đứng sau trong mỗi cặp trùng, hoặc ca đụng giờ chặn, rồi xếp lại
+    if (!App.conflicts) runCheck(true);
+    const ids = new Set(App.conflicts.map(c => c.ids[c.ids.length - 1]));
+    if (!ids.size) { log('Không có ca nào cần sắp xếp lại.'); return; }
+    let saved = 0; ids.forEach(id => { const t = byId(id); if (t && t.tt === 3) { App.move.add(id); saved++; } });
+    const res = buildPlan(null), stuck = res.filter(r => r.status === 'stuck').length;
+    const left = runCheck(true);
+    log(`Tự sắp xếp lại ${ids.size} ca (${saved} ca đã lưu trên HIS sẽ được ghi lại giờ mới). Sau khi xếp: còn ${left} lỗi hoặc cảnh báo, ${stuck} ca kẹt.`);
+    if (H.canFill && !H.noAuto && $('#autoFill').checked) runFill();
+  }
+
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  // Số ca sẽ điền nếu bấm lúc này: chỉ ca đã qua giờ kết thúc
+  function fillStat(scope) {
+    const now = H.now(), rows = Array.from(App.plan.values()).filter(r => r.status === 'planned' && (!scope || scope.has(byId(r.id).bn)));
+    const due = rows.filter(r => r.e <= now);
+    return { due: due.length, over: due.filter(r => byId(r.id).s != null).length, wait: rows.length - due.length, now };
+  }
+  function askFill(scope) { if (App.running || !H.canFill) return; App.fillAsk = { scope: scope || null }; App.goAsk = false; renderTiles(); }   // luôn hỏi lại trước khi ghi vào HIS
+  function renderFillAsk() {
+    const el = $('#fillAsk'), a = App.fillAsk; el.hidden = !a || App.running; if (el.hidden) return;
+    const st = fillStat(a.scope), who = a.scope ? ' của ' + Array.from(a.scope).map(b => (H.pats.get(b) || {}).ten || b).join(', ') : '';
+    const lúc = st.now < 0 ? 'Ngày đang chạy chưa tới.' : st.now >= 1440 ? 'Ngày đang chạy đã qua.' : 'Bây giờ là ' + hm(st.now) + '.';
+    el.innerHTML = st.due ? `<b>Điền ${st.due} ca${esc(who)} đã qua giờ kết thúc vào HIS?</b><br>${lúc} ${st.over ? st.over + ' ca trong đó đang có giờ cũ và sẽ bị ghi đè. ' : ''}${st.wait ? st.wait + ' ca chưa qua giờ kết thúc được để lại. ' : ''}${esc(H.fillWarn || '')}<div class="row" style="margin-top:8px"><button type="button" data-fill="1">Điền thử 1 ca</button><button type="button" class="primary" data-fill="all">Điền cả ${st.due} ca</button><button type="button" data-fill="no">Thôi</button></div>`
+      : `<b>Chưa có ca nào${esc(who)} qua giờ kết thúc.</b><br>${lúc} ${st.wait} ca dự kiến được để lại; bấm Điền vào HIS lần nữa khi các ca đã làm xong.<div class="row" style="margin-top:8px"><button type="button" data-fill="no">Đóng</button></div>`;
+  }
+  async function runFill(scope, limit, auto) {
+    if (App.running || !H.canFill) return;
+    if (!auto) App.autoStop = false;   // người dùng tự bấm thì cho tự điền chạy lại
+    const now = H.now();
+    const all = Array.from(App.plan.values()).filter(r => r.status === 'planned' && (!scope || scope.has(byId(r.id).bn))).sort((a, b) => a.s - b.s);
+    all.forEach(r => { r.wait = r.e > now; });   // chỉ điền ca đã qua giờ kết thúc
+    const rows = all.filter(r => !r.wait).slice(0, limit || 1e9), wait = all.filter(r => r.wait).length;
+    App.fillAsk = null;
+    if (!rows.length) { renderAll(); return; }
+    App.running = true; App.stop = false; renderTiles();
+    let ok = 0, fail = 0, skip = 0, err = ''; const w0 = App.warn;
+    try { if (H.fillBegin) await H.fillBegin(); } catch (e) { err = e.message || String(e); }
+    for (let i = 0; i < rows.length && !err && !App.stop; i++) {
+      const r = rows[i], t = byId(r.id);
+      const had = t.s != null ? `${hm(t.s)}–${hm(t.e)} ${staffName(t.perf)}${t.may ? ' ' + t.may : ''}` : '';
+      const res = (await H.fill(t, r)) || { ok: false, err: 'không có kết quả' };
+      if (res.warned) App.warn += res.warned === true ? 1 : res.warned;
+      if (res.ok) {
+        App.filled.add(r.id); App.move.delete(r.id); r.status = 'fixed'; r.wait = false; ok++;
+        if (H.onFilled) H.onFilled(Array.from(App.filled)); savePlan();
+        if (had) log(`${t.tenBN} · ${t.ten}: ghi đè ${had} thành ${hm(r.s)}–${hm(r.e)} ${staffName(r.perf)}${r.may ? ' ' + r.may : ''}`);
+      } else if (res.skip) { skip++; log(`${hm(r.s)} ${t.tenBN} · ${t.ten}: bỏ qua, ${res.err}`); }
+      else { fail++; log(`${hm(r.s)} ${t.tenBN} · ${t.ten}: HIS từ chối, ${res.err || 'không lưu được'}`); if (H.strict) err = 'HIS từ chối một ca nên app dừng để bạn xem'; }
+      if (i % 12 === 0) { renderTiles(); await sleep(0); }
+    }
+    try { if (H.fillEnd) await H.fillEnd(); } catch (e) {}
+    const note = `${App.stop ? 'Đã dừng theo lệnh. ' : ''}Điền ${ok} ca lúc ${now >= 1440 || now < 0 ? '' : hm(now)}${wait ? `, ${wait} ca chưa qua giờ kết thúc nên để lại` : ''}${skip ? `, ${skip} ca bỏ qua` : ''}${fail ? `, ${fail} ca HIS từ chối` : ''}. HIS báo trùng ${App.warn - w0} lần, app đã bấm Đồng ý.${err ? ' Dừng lại vì: ' + err + '.' : ''}`;
+    if (ok || fail || skip || err) log(note);
+    if (err || fail) { App.autoStop = true; if (auto) log('Tự điền tạm dừng vì có lỗi. Xem lý do ở trên rồi bấm Điền vào HIS để chạy lại.'); }
+    savePlan();
+    App.running = false; App.conflicts = null; renderAll();
+    if (H.afterFill && (ok || fail)) H.afterFill(note);
+  }
+  // Các phiếu sẽ bị gỡ: đang xanh, không phải sắc thuốc (HIS tự cập nhật), không phải ca app vừa điền. Mỗi phiếu chỉ tính một lần.
+  function goList() { const seen = new Set(); return H.tickets.filter(t => { if (t.tt !== 3 || t.auto || App.filled.has(t.id) || (groupOf(t.ten) || {}).skip) return false; const k = H.goKey ? H.goKey(t) : t.id; if (seen.has(k)) return false; seen.add(k); return true; }); }
+  async function runGoAll(limit) {
+    if (App.running || !H.canGo) return;
+    const list = goList().slice(0, limit || 1e9);
+    App.goAsk = false; App.running = true; App.stop = false; renderTiles();
+    let ok = 0, err = '';
+    try { if (H.goBegin) await H.goBegin(); } catch (e) { err = e.message || String(e); }
+    for (let i = 0; i < list.length && !err && !App.stop; i++) {   // gặp phiếu HIS không cho gỡ thì dừng ngay, không gỡ tiếp
+      const r = (await H.go(list[i])) || { ok: true };
+      if (r.ok) ok++; else err = r.err || 'HIS không gỡ được';
+      if (i % 12 === 0) { renderTiles(); await sleep(0); }
+    }
+    try { if (H.goEnd) await H.goEnd(); } catch (e) {}
+    const note = `Đã gỡ xanh ${ok} trên ${list.length} phiếu${App.stop ? ' rồi dừng theo lệnh' : ''}${err ? '. Dừng lại vì: ' + err : ''}. Phiếu đã gỡ vẫn giữ giờ cũ trên HIS cho đến khi được điền lại.`;
+    log(note);
+    App.running = false; App.conflicts = null; renderAll();
+    if (H.afterGo) H.afterGo(note);
+  }
+  async function runBn(scope) {   // chạy riêng: xếp (và điền, nếu được phép ghi) chỉ cho các người bệnh trong scope
+    if (App.running || !scope.size) return;
+    const res = buildPlan(scope);
+    const names = Array.from(scope).map(b => H.pats.get(b).ten).join(', ');
+    log(`Chạy riêng cho ${names}: ${res.filter(r => r.status === 'planned').length} ca đã xếp, ${res.filter(r => r.status === 'stuck').length} ca kẹt.`);
+    renderAll(); askFill(scope);
+  }
+
+  /* ---------- các bảng ---------- */
+  function planInfo(t) {
+    const p = App.plan.get(t.id);
+    if (App.skip.has(t.id)) return ['info', 'Bỏ qua lượt này'];
+    if (p && p.status === 'planned') return p.wait ? ['info', 'Chờ qua giờ kết thúc'] : ['vang', 'Dự kiến, chưa điền'];
+    if (p && p.status === 'stuck') return ['do', p.note];
+    if (t.tt === 3) return ['xanh', App.filled.has(t.id) ? 'Đã điền' : 'Đã có trên HIS'];
+    return ['vang', t.vet ? 'Chưa xếp, còn giờ cũ' : 'Chưa xếp'];
+  }
+  function renderPlan() {
+    const fp = $('#planPerf').value, fs = $('#planSt').value, eng = staffEng();
+    const rows = workTickets().map(t => { const p = App.plan.get(t.id); const v = p && p.status === 'planned' ? p : t.tt === 3 ? t : null; return { t, p, v, st: planInfo(t) }; })
+      .filter(r => (!fp || (r.v && r.v.perf === fp)) && (!fs || (fs === 'bad' ? r.st[0] === 'do' : !!(r.p && r.p.status === 'planned'))))
+      .sort((a, b) => (a.v ? a.v.s : 9999) - (b.v ? b.v.s : 9999) || (a.t.id < b.t.id ? -1 : 1));
+    $('#plan').innerHTML = '<thead><tr><th>Bắt đầu</th><th>Kết thúc</th><th>Người bệnh</th><th>Thủ thuật</th><th>Giờ chỉ định</th><th>Người làm</th><th>Máy</th><th>Trạng thái</th></tr></thead><tbody>' +
+      (rows.length ? rows.map(({ t, p, v, st }) => {
+        const g = groupOf(t.ten); let who = esc(staffName(v ? v.perf : ''));
+        if (t.tt !== 3 || App.move.has(t.id)) {
+          const m = App.manual.get(t.id) || '';
+          who = `<select id="pp_${eid(t.id)}" data-pin="${esc(t.id)}" aria-label="Người làm"><option value="">${v && !m ? esc(staffName(v.perf)) + ' (tự chọn)' : 'Tự chọn'}</option>` +
+            eng.filter(s => g && s.can[g.k]).map(s => `<option value="${esc(s.id)}"${s.id === m ? ' selected' : ''}>${esc(staffName(s.id))}${s.on.some(Boolean) ? '' : ' (nghỉ)'}</option>`).join('') + '</select>';
+        }
+        const btn = st[0] === 'do' || App.skip.has(t.id) ? ` <button type="button" class="small" data-skip="${esc(t.id)}">${App.skip.has(t.id) ? 'Đưa lại vào lượt chạy' : 'Bỏ qua lượt này'}</button>` : '';
+        return `<tr><td>${v ? hm(v.s) : ''}</td><td>${v ? hm(v.e) : ''}</td><td>${esc(t.tenBN)}</td><td>${esc(t.ten)}</td><td>${hm(t.cd)}</td><td>${who}</td><td>${esc(v ? v.may || '' : '')}</td><td class="wrapcell"><span class="pill ${st[0]}">${esc(st[1])}</span>${btn}</td></tr>`;
+      }).join('') : `<tr><td colspan="8" class="empty">${H.tickets.length ? 'Không có ca nào khớp bộ lọc.' : 'Chưa có danh sách. Tải danh sách của ngày cần chạy trước.'}</td></tr>`) + '</tbody>';
+  }
+  function renderBlocks() {
+    const kindName = b => b.auto ? 'Bác sĩ khám người bệnh mới' : b.kind === 'perf' ? 'Chặn người làm' : b.kind === 'rv' ? 'Ra viện, xử trí' : 'Chặn người bệnh';
+    $('#blocks').innerHTML = '<thead><tr><th>Loại</th><th>Ai</th><th>Từ</th><th>Đến</th><th></th></tr></thead><tbody>' +
+      (D.blocks.length ? D.blocks.slice().sort((a, b) => a.s - b.s).map(b => `<tr><td>${kindName(b)}${b.auto ? ' <span class="tag">tự động</span>' : ''}</td>` +
+        `<td>${esc(b.kind === 'perf' ? staffName(b.who) : (H.pats.get(b.who) || {}).ten || b.who)}</td><td>${hm(b.s)}</td><td>${b.kind === 'rv' ? 'hết ngày' : hm(b.e)}</td><td><button type="button" class="small" data-delbk="${b.id}">Xóa</button></td></tr>`).join('')
+        : '<tr><td colspan="5" class="empty">Chưa có giờ chặn nào.</td></tr>') + '</tbody>';
+    const kind = $('#bkKind').value, cur = $('#bkWho').value;
+    $('#bkWho').innerHTML = kind === 'perf' ? S.staff.map(s => `<option value="${esc(s.id)}">${esc(s.ten)}</option>`).join('') : Array.from(H.pats.values()).map(p => `<option value="${esc(p.bn)}">${esc(p.ten)}</option>`).join('');
+    if (cur && Array.from($('#bkWho').options).some(o => o.value === cur)) $('#bkWho').value = cur;
+    $('#bkELabel').hidden = kind === 'rv';
+  }
+  function renderTiles() {
+    const work = workTickets(), p = Array.from(App.plan.values());
+    const sao = work.filter(t => t.tt === 3 && !App.filled.has(t.id)).length;
+    const chua = work.filter(t => t.tt === 2 && !App.skip.has(t.id) && !(App.plan.get(t.id) && App.plan.get(t.id).status === 'planned')).length;
+    const planned = p.filter(r => r.status === 'planned').length, stuck = p.filter(r => r.status === 'stuck').length;
+    const errs = App.conflicts ? App.conflicts.length : null;
+    const tiles = [['Phiếu vàng chưa xếp', chua, ''], [H.canGo ? 'Phiếu xanh do sao phiếu' : 'Ca đã xanh trên HIS', sao, sao && H.canGo ? 'bad' : ''], ['Dự kiến, chờ điền', planned, ''], ['Ca kẹt cần gỡ', stuck, stuck ? 'bad' : ''],
+      ['Đã điền vào HIS', App.filled.size, App.filled.size ? 'good' : ''], ['Lỗi và cảnh báo trùng', errs == null ? '—' : errs, errs ? 'bad' : errs === 0 ? 'good' : '']];
+    $('#tiles').innerHTML = tiles.map(t => `<div class="tile ${t[2]}"><b>${t[1]}</b><span>${t[0]}</span></div>`).join('');
+    $('#goInfo').textContent = !H.canGo ? `Có ${sao} ca đang xanh trên HIS. Bản này chưa gỡ xanh.` : sao ? `Có ${sao} phiếu đang xanh từ trước lượt chạy này. Gỡ xanh để biết đúng những thủ thuật cần chạy.` : 'Không còn phiếu xanh do sao phiếu.';
+    const on = S.staff.map(st => D.on[st.id]), n = k => on.filter(k).length;
+    $('#ccInfo').textContent = `Chấm công: ${n(o => o[0] && o[1])} người cả ngày, ${n(o => o[0] && !o[1])} sáng, ${n(o => !o[0] && o[1])} chiều, ${n(o => !o[0] && !o[1])} nghỉ.`;
+    $('#btnGoAll').disabled = App.running || !sao || !H.canGo;
+    $('#btnPlan').disabled = App.running || !H.tickets.length; $('#btnFill').disabled = App.running || !planned || !H.canFill; $('#btnStop').disabled = !App.running;
+    ['#btnCheck', '#btnFix', '#btnCheck2', '#btnFix2', '#btnRunSel'].forEach(s => { $(s).disabled = App.running || !H.tickets.length; });
+    $('#btnRunSel').textContent = H.canFill ? 'Chạy riêng cho người đã tích' : 'Xếp riêng cho người đã tích';
+    $('#dirtyNote').hidden = !App.dirty; $('#roNote').hidden = !!H.canFill || !!H.canGo; $('#roNote').textContent = H.canGo ? 'Bản này gỡ xanh được nhưng chưa điền vào HIS: bảng giờ xếp xong mới nằm trên app.' : 'Bản này chỉ đọc số liệu từ HIS: xếp giờ và soát trùng được, chưa gỡ xanh và chưa điền vào HIS.';
+    const ask = $('#goAsk'), gl = goList().length; ask.hidden = !App.goAsk || App.running || !gl;
+    if (!ask.hidden) ask.innerHTML = `<b>Gỡ hoàn thành ${gl} phiếu đang xanh của ngày ${esc(H.dateLabel)}?</b><br>${esc(H.goWarn || 'Phiếu đã gỡ về vàng nhưng vẫn giữ giờ và người làm cũ cho đến khi được điền lại. Sắc thuốc không bị gỡ.')}<div class="row" style="margin-top:8px"><button type="button" data-go="1">Gỡ thử 1 phiếu</button><button type="button" class="primary" data-go="all">Gỡ cả ${gl} phiếu</button><button type="button" data-go="no">Thôi</button></div>`;
+    $('#ccTitle').textContent = 'Chấm công ngày ' + H.dateLabel;
+    const c = $('#cntTrung'); c.hidden = !errs; c.textContent = errs || '';
+    renderFillAsk();
+    const an = $('#autoNote'); an.hidden = !(H.autoNote || App.autoStop); an.textContent = App.autoStop ? 'Tự điền đang tạm dừng vì lần điền trước có lỗi.' : (H.autoNote || '');
+    const af = $('#autoFill').closest('label'); if (af) af.hidden = !!H.noAuto;   // HIS thật: chưa cho tự điền, mỗi lượt điền đều phải bấm và xác nhận
+  }
+  function renderBn() {
+    const rows = curRows(), mid = S.shifts[0][1], find = fold($('#bnSearch').value.trim());
+    const body = Array.from(H.pats.values()).map(p => {
+      if (find && fold(p.ten + ' ' + p.maBA).indexOf(find) < 0) return '';
+      const mine = workTickets().filter(t => t.bn === p.bn), rs = rows.filter(r => r.bn === p.bn).sort((a, b) => a.s - b.s);
+      if (!mine.length) return '';
+      const am = rs.filter(r => r.s < mid).length, rest = mine.filter(t => !rs.some(r => r.id === t.id));
+      const head = `<tr class="grp"><td class="c"><input type="checkbox" id="bs_${eid(p.bn)}" data-selbn="${esc(p.bn)}"${App.sel.has(p.bn) ? ' checked' : ''} aria-label="Chọn ${esc(p.ten)}"></td><td colspan="4">${esc(p.ten)} · ${esc(p.maBA)}${p.vao != null ? ' <span class="tag">mới vào ' + hm(p.vao) + '</span>' : ''} <span class="muted">· ${mine.length} thủ thuật · ${am} sáng, ${rs.length - am} chiều${rest.length ? ', ' + rest.length + ' chưa có giờ' : ''}</span></td><td><button type="button" class="small" data-runbn="${esc(p.bn)}">Chạy riêng</button></td></tr>`;
+      const lines = rs.map(r => `<tr><td></td><td>${hm(r.s)}–${hm(r.e)}</td><td>${esc(gLabel(r))}</td><td>${esc(staffName(r.perf))}</td><td>${esc(r.may || '')}</td><td><span class="pill ${r.src === 'his' ? 'xanh' : 'vang'}">${r.src === 'his' ? 'Đã lưu trên HIS' : 'Dự kiến'}</span></td></tr>`).join('') +
+        rest.map(t => { const st = planInfo(t); return `<tr><td></td><td></td><td>${esc((groupOf(t.ten) || {}).label || t.ten)}</td><td></td><td></td><td class="wrapcell"><span class="pill ${st[0]}">${esc(st[1])}</span></td></tr>`; }).join('');
+      return head + lines;
+    }).join('');
+    $('#bnTable').innerHTML = '<thead><tr><th></th><th>Giờ làm</th><th>Thủ thuật</th><th>Người làm</th><th>Máy</th><th>Trạng thái</th></tr></thead><tbody>' + (body || `<tr><td colspan="6" class="empty">${find ? 'Không có người bệnh nào khớp từ đang tìm.' : 'Chưa có danh sách người bệnh.'}</td></tr>`) + '</tbody>';
+  }
+  // Danh sách: mọi thủ thuật của ngày trong một bảng phẳng, chỉ để xem
+  function renderDs() {
+    const find = fold($('#dsSearch').value.trim()), fs = $('#dsSt').value, sort = $('#dsSort').value, cur = new Map(curRows().map(r => [r.id, r]));
+    const all = workTickets().map(t => { const r = cur.get(t.id) || null; return { t, r, kind: r ? r.src : 'none', who: r ? staffName(r.perf) : '', st: planInfo(t) }; });
+    const n = k => all.filter(x => x.kind === k).length, cmp = (a, b) => String(a).localeCompare(String(b), 'vi'), time = x => x.r ? x.r.s : 9999;
+    const by = {
+      bn: (a, b) => cmp(a.t.tenBN, b.t.tenBN) || cmp(a.t.maBA, b.t.maBA) || time(a) - time(b),
+      gio: (a, b) => time(a) - time(b) || cmp(a.t.tenBN, b.t.tenBN),
+      perf: (a, b) => (a.who ? 0 : 1) - (b.who ? 0 : 1) || cmp(a.who, b.who) || time(a) - time(b)
+    };
+    const list = all.filter(x => (!fs || x.kind === fs) && (!find || fold([x.t.tenBN, x.t.maBA, x.t.ten, x.who, x.r ? x.r.may || '' : ''].join(' ')).indexOf(find) >= 0)).sort(by[sort] || by.bn);
+    $('#dsInfo').textContent = !H.tickets.length ? 'Chưa có danh sách. Tải danh sách của ngày cần xem trước.'
+      : `Ngày ${H.dateLabel}: ${all.length} thủ thuật của ${new Set(all.map(x => x.t.bn)).size} người bệnh, gồm ${n('his')} đã lưu trên HIS, ${n('plan')} dự kiến chưa điền, ${n('none')} chưa có giờ. Sắc thuốc không nằm trong danh sách.${list.length !== all.length ? ' Đang hiện ' + list.length + ' dòng khớp bộ lọc.' : ''}`;
+    $('#dsTable').innerHTML = '<thead><tr><th class="c">STT</th><th>Người bệnh</th><th>Mã bệnh án</th><th>Thủ thuật</th><th>Chỉ định</th><th>Giờ làm</th><th>Người làm</th><th>Mã máy</th><th>Trạng thái</th></tr></thead><tbody>' +
+      (list.length ? list.map((x, i) => `<tr><td class="c">${i + 1}</td><td>${esc(x.t.tenBN)}</td><td>${esc(x.t.maBA || '')}</td><td class="dsname">${esc(x.t.ten)}</td><td>${hm(x.t.cd)}</td><td>${x.r ? hm(x.r.s) + '–' + hm(x.r.e) : ''}</td><td>${esc(x.who)}</td><td>${esc(x.r ? x.r.may || '' : '')}</td><td><span class="pill ${x.st[0]}">${esc(x.st[1])}</span></td></tr>`).join('')
+        : `<tr><td colspan="9" class="empty">${all.length ? 'Không có dòng nào khớp bộ lọc.' : 'Chưa có thủ thuật nào.'}</td></tr>`) + '</tbody>';
+  }
+  function renderTrung() {
+    const sel = $('#trungType'), cur = sel.value;
+    sel.innerHTML = '<option value="">Mọi loại</option>' + Object.keys(TYPES).map(k => `<option value="${k}">${TYPES[k][0]}</option>`).join(''); sel.value = cur;
+    const c = App.conflicts;
+    if (!c) { $('#trungTiles').innerHTML = ''; $('#trungTable').innerHTML = '<tbody><tr><td class="empty">Chưa kiểm tra. Bấm Kiểm tra trùng để soát mọi ca đã lưu trên HIS và ca dự kiến.</td></tr></tbody>'; return; }
+    const e = c.filter(x => x.level === 'err').length, rows = new Map(curRows().map(r => [r.id, r]));
+    $('#trungTiles').innerHTML = `<div class="tile ${e ? 'bad' : 'good'}"><b>${e}</b><span>Lỗi</span></div><div class="tile"><b>${c.length - e}</b><span>Cảnh báo</span></div><div class="tile"><b>${rows.size}</b><span>Ca đã soát</span></div>`;
+    const list = c.filter(x => !cur || x.type === cur);
+    $('#trungTable').innerHTML = '<thead><tr><th>Mức</th><th>Loại</th><th>Ca liên quan</th></tr></thead><tbody>' + (list.length ? list.map(x =>
+      `<tr><td><span class="pill ${x.level === 'err' ? 'do' : 'vang'}">${x.level === 'err' ? 'Lỗi' : 'Cảnh báo'}</span></td><td>${esc(typeName(x))}${x.extra ? '<br><span class="muted">' + esc(x.extra) + '</span>' : ''}</td><td class="wrapcell">${x.ids.map(id => esc(rows.has(id) ? rowLabel(rows.get(id)) : '')).join('<br>')}</td></tr>`).join('')
+      : `<tr><td colspan="3" class="empty">${c.length ? 'Không có lỗi loại này.' : 'Không có ca nào trùng hoặc sai quy tắc trong ' + rows.size + ' ca đã soát.'}</td></tr>`) + '</tbody>';
+  }
+  function renderLam() {
+    const fill = (sel, opts, all) => { const el = $(sel), v = el.value; el.innerHTML = `<option value="">${all}</option>` + opts.map(o => `<option value="${esc(o[0])}">${esc(o[1])}</option>`).join(''); el.value = v; };
+    fill('#lamPerf', S.staff.map(s => [s.id, s.ten]), 'Mọi người làm'); fill('#lamGrp', WORK.map(g => [g.k, g.label]), 'Mọi thủ thuật');
+    const fp = $('#lamPerf').value, fg = $('#lamGrp').value, mid = S.shifts[0][1], rows = curRows().filter(r => !fg || r.gk === fg);
+    const known = new Set(S.staff.map(s => s.id));
+    const others = Array.from(new Set(rows.map(r => r.perf).filter(p => p && !known.has(p)))).map(p => ({ id: p, ten: staffName(p), out: true }));
+    const body = S.staff.concat(others).filter(s => !fp || s.id === fp).map(st => {
+      const rs = rows.filter(r => r.perf === st.id).sort((a, b) => a.s - b.s);
+      const on = D.on[st.id] || [false, false], avail = (on[0] ? S.shifts[0][1] - S.shifts[0][0] : 0) + (on[1] ? S.shifts[1][1] - S.shifts[1][0] : 0);
+      const busy = rs.reduce((n, r) => n + r.busy, 0), am = rs.filter(r => r.s < mid).length;
+      return `<tr class="grp"><td colspan="6">${esc(st.ten)} <span class="muted">· ${st.out ? 'không có trong bảng nhân viên' : on[0] && on[1] ? 'cả ngày' : on[0] ? 'buổi sáng' : on[1] ? 'buổi chiều' : 'nghỉ'}</span></td></tr>` +
+        rs.map(r => `<tr><td>${esc(st.ten)}</td><td>${hm(r.s)}–${hm(r.e)}</td><td>${esc(r.t.tenBN)}</td><td>${esc(gLabel(r))}</td><td>${esc(r.may || '')}</td><td><span class="pill ${r.src === 'his' ? 'xanh' : 'vang'}">${r.src === 'his' ? 'Đã lưu' : 'Dự kiến'}</span></td></tr>`).join('') +
+        `<tr class="sum"><td colspan="6">Tổng: ${rs.length} ca (${am} sáng, ${rs.length - am} chiều) · ${busy} phút trực tiếp làm${avail ? ' trên ' + avail + ' phút có mặt' : ''}</td></tr>`;
+    }).join('');
+    $('#lamTable').innerHTML = '<thead><tr><th>Người làm</th><th>Giờ làm</th><th>Tên người bệnh</th><th>Thủ thuật</th><th>Mã máy</th><th>Nguồn</th></tr></thead><tbody>' + (body || '<tr><td colspan="6" class="empty">Chưa có nhân viên nào.</td></tr>') + '</tbody>';
+  }
+  function renderTL() {
+    // Theo người làm: mỗi ô là quãng trực tiếp làm, nên các ô của một người không chồng lên nhau. Theo người bệnh hoặc máy: mỗi ô là cả ca.
+    const mode = $('#tlMode').value, rows = curRows(), sh = S.shifts, ppm = mode === 'perf' ? 3.2 : 2.4, find = fold($('#tlSearch').value.trim());
+    const t0 = sh[0][0] - 15, t1 = sh[sh.length - 1][1] + 15, W = Math.round((t1 - t0) * ppm), px = m => Math.round((Math.max(t0, Math.min(t1, m)) - t0) * ppm);
+    const bad = new Set(); (App.conflicts || []).forEach(c => { if (c.level === 'err') c.ids.forEach(i => bad.add(i)); });
+    const uniq = a => Array.from(new Set(a));
+    const lanes = (mode === 'perf' ? S.staff.map(s => ({ id: s.id, name: s.ten })) : mode === 'bn' ? Array.from(H.pats.values()).map(p => ({ id: p.bn, name: p.ten })) : uniq([].concat.apply([], WORK.map(mayList).filter(Boolean))).map(m => ({ id: m, name: m })))
+      .filter(l => (!find || fold(l.name).indexOf(find) >= 0) && (mode !== 'perf' || !$('#lamPerf').value || l.id === $('#lamPerf').value));
+    const off = [[t0, sh[0][0]]].concat(sh.slice(1).map((s, i) => [sh[i][1], s[0]]), [[sh[sh.length - 1][1], t1]]);
+    const grid = `background-size:${30 * ppm}px 100%;background-position:${((30 - t0 % 30) % 30) * ppm}px 0`;
+    let ticks = ''; for (let m = Math.ceil(t0 / 30) * 30; m <= t1; m += 30) ticks += `<span style="left:${px(m)}px">${hm(m)}</span>`;
+    let html = `<div class="lname muted">${mode === 'perf' ? 'Người làm' : mode === 'bn' ? 'Người bệnh' : 'Máy'}</div><div class="track axis" style="width:${W}px">${ticks}</div>`;
+    lanes.forEach(l => {
+      const mine = rows.filter(r => (mode === 'perf' ? r.perf : mode === 'bn' ? r.bn : r.may) === l.id);
+      let inner = off.map(o => `<div class="off" style="left:${px(o[0])}px;width:${px(o[1]) - px(o[0])}px"></div>`).join('');
+      if (mode === 'perf') { const on = D.on[l.id] || [true, true]; sh.forEach((s, i) => { if (!on[i]) inner += `<div class="off" style="left:${px(s[0])}px;width:${px(s[1]) - px(s[0])}px"></div>`; }); }
+      blocksEng().filter(b => (mode === 'perf' && b.kind === 'perf' || mode === 'bn' && b.kind === 'bn') && b.who === l.id).forEach(b => { inner += `<div class="blk" style="left:${px(b.s)}px;width:${Math.max(3, px(b.e) - px(b.s))}px" data-tip="Giờ chặn ${hm(b.s)}–${b.e >= 1440 ? 'hết ngày' : hm(b.e)} · ${esc(b.note)}"></div>`; });
+      mine.forEach(r => { const end = mode === 'perf' ? r.s + r.busy : r.e, w = Math.max(6, px(end) - px(r.s) - 2);
+        inner += `<div class="bar ${r.src === 'plan' ? 'plan' : ''} ${bad.has(r.id) ? 'bad' : ''}" style="left:${px(r.s)}px;width:${w}px" data-tip="${esc(rowLabel(r))}">${w >= 26 ? '<span>' + esc(r.g ? r.g.code : '?') + '</span>' : ''}</div>`; });
+      html += `<div class="lname" title="${esc(l.name)}"${mode === 'perf' ? ' data-lane="' + esc(l.id) + '" style="cursor:pointer"' : ''}>${esc(l.name)}</div><div class="track" style="width:${W}px;${grid}">${inner}</div>`;
+    });
+    $('#tl').innerHTML = lanes.length ? html : '<div class="empty" style="grid-column:1/-1">Không có dòng nào khớp từ đang tìm.</div>';
+  }
+  const lvOf = on => on[0] && on[1] ? 0 : on[0] ? 1 : on[1] ? 2 : 3, onOf = lv => [[true, true], [true, false], [false, true], [false, false]][lv];
+  /* ---------- quản lý nhân viên: dùng ở thẻ Chấm công (nút Cập nhật danh sách) và thẻ Cài đặt ---------- */
+  const NHOM = ['Bác sĩ', 'Điều dưỡng', 'Kỹ thuật viên', 'Khác'];
+  function mgrResults() {
+    const q = (App.stq || '').trim(), all = q ? H.userSearch(q) : [], list = all.slice(0, 8);
+    App.stRes = list;
+    return q ? (list.length ? list.map((u, i) => `<button type="button" class="small" data-addst="${i}">Thêm ${esc(u.ten)}${u.user ? ' · ' + esc(u.user) : ''}${u.nhom ? ' · ' + esc(u.nhom) : ''}</button>`).join('') + (all.length > 8 ? `<span class="muted">và ${all.length - 8} người khác, gõ thêm để thu hẹp</span>` : '') : '<span class="muted">Không thấy ai khớp tên đang gõ.</span>') : '';
+  }
+  function mgrHtml(p) {
+    return '<div class="scroll tall"><table><thead><tr><th>Họ tên</th><th>Tên đăng nhập HIS</th><th>Nhóm</th><th></th></tr></thead><tbody>' +
+      (S.staff.length ? S.staff.map(st => `<tr><td>${esc(st.ten)}</td><td>${esc(st.user || 'chưa có')}</td><td><select id="nh${p}_${eid(st.id)}" data-nhom="${esc(st.id)}" aria-label="Nhóm của ${esc(st.ten)}">${NHOM.concat(st.nhom && NHOM.indexOf(st.nhom) < 0 ? [st.nhom] : []).map(n => `<option${(st.nhom || 'Khác') === n ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></td>` +
+        `<td><button type="button" class="small" data-delst="${esc(st.id)}">${App.delAsk === st.id ? 'Bấm lần nữa để xóa' : 'Xóa'}</button></td></tr>`).join('') : '<tr><td colspan="4" class="empty">Chưa có nhân viên nào.</td></tr>') + '</tbody></table></div>' +
+      `<div class="row"><input type="text" id="stQ${p}" data-stq="1" value="${esc(App.stq || '')}" placeholder="Gõ tên người cần thêm" aria-label="Tìm nhân viên để thêm"><span class="muted">${esc(H.userHint || '')}</span></div><div class="row" data-stres="1">${mgrResults()}</div><p class="muted" data-stmsg="1">${esc(App.stMsg || '')}</p>`;
+  }
+  function renderMgr() { $('#stMgrCD').innerHTML = mgrHtml('CD'); $('#stMgrCC').hidden = !App.ccEdit; $('#stMgrCC').innerHTML = App.ccEdit ? mgrHtml('CC') : ''; $('#ccEdit').textContent = App.ccEdit ? 'Xong' : 'Cập nhật danh sách'; }
+  function mgrInput(e) {   // gõ tên: chỉ vẽ lại phần kết quả để không mất con trỏ
+    if (!e.target.dataset.stq) return;
+    App.stq = e.target.value; const html = mgrResults();
+    Array.from($('#tab-cc').querySelectorAll('[data-stres]')).concat(Array.from($('#tab-cd').querySelectorAll('[data-stres]'))).forEach(el => { el.innerHTML = html; });
+  }
+  function mgrClick(e) {
+    const d = e.target.dataset;
+    if (d.addst != null) {
+      const u = (App.stRes || [])[+d.addst]; if (!u) return;
+      const old = S.staff.find(p => fold(p.ten) === fold(u.ten));
+      if (old) { old.user = u.user || old.user; old.uid = u.uid || old.uid; if (u.nhom) old.nhom = u.nhom; App.stMsg = 'Đã cập nhật tài khoản HIS cho ' + old.ten + '.'; }
+      else { const p = { id: u.id || u.ten, ten: u.ten, user: u.user || '', uid: u.uid || '', nhom: u.nhom || 'Khác', can: {}, prio: {}, cc: {} }; S.gone = (S.gone || []).filter(x => x !== p.id); S.staff.push(p); ensureStaff(p); App.stMsg = 'Đã thêm ' + p.ten + '. Tích chứng chỉ cho người này ở thẻ Cài đặt.'; }
+      App.stq = ''; dirty(); return true;
+    }
+    if (d.delst != null) {
+      if (App.delAsk !== d.delst) { App.delAsk = d.delst; renderMgr(); return true; }
+      const st = staffById(d.delst); App.delAsk = null;
+      S.staff = S.staff.filter(p => p.id !== d.delst); delete D.on[d.delst]; delete D.week[d.delst]; S.gone = (S.gone || []).concat([d.delst]);   // nhớ để không tự thêm lại
+      D.blocks = D.blocks.filter(b => !(b.kind === 'perf' && b.who === d.delst && !b.auto));
+      App.manual.forEach((v, k) => { if (v === d.delst) App.manual.delete(k); });
+      App.stMsg = 'Đã xóa ' + (st ? st.ten : d.delst) + ' khỏi bảng nhân viên.'; dirty(); return true;
+    }
+    return false;
+  }
+  function renderCC() {
+    const eng = staffEng(), rows = curRows(), mins = i => S.shifts[i][1] - S.shifts[i][0];
+    $('#ccDay').innerHTML = '<thead><tr><th>Họ tên</th><th>Tên đăng nhập HIS</th><th>Nhóm</th><th class="c">Sáng</th><th class="c">Chiều</th><th>Phút có mặt</th><th>Thủ thuật được làm</th><th>Đã xếp</th></tr></thead><tbody>' +
+      (S.staff.length ? S.staff.map((st, i) => { const on = D.on[st.id], rs = rows.filter(r => r.perf === st.id), k = eid(st.id);
+        return `<tr><td>${esc(st.ten)}</td><td>${esc(st.user || 'chưa có')}</td><td>${esc(st.nhom || '')}</td><td class="c"><input type="checkbox" id="on0_${k}" data-on="${esc(st.id)}" data-i="0"${on[0] ? ' checked' : ''} aria-label="${esc(st.ten)} làm buổi sáng"></td><td class="c"><input type="checkbox" id="on1_${k}" data-on="${esc(st.id)}" data-i="1"${on[1] ? ' checked' : ''} aria-label="${esc(st.ten)} làm buổi chiều"></td>` +
+          `<td>${(on[0] ? mins(0) : 0) + (on[1] ? mins(1) : 0)}</td>` +
+          `<td class="wrapcell">${esc(WORK.filter(g => eng[i].can[g.k]).map(g => g.label).join(', ') || 'chưa tích thủ thuật nào')}</td><td>${rs.length} ca · ${rs.reduce((n, r) => n + r.busy, 0)} phút</td></tr>`; }).join('')
+        : '<tr><td colspan="8" class="empty">Chưa có nhân viên nào. Bấm Cập nhật danh sách để thêm.</td></tr>') + '</tbody>';
+    const LV = ['Cả ngày', 'Sáng', 'Chiều', 'Nghỉ'], days = H.weekDays;
+    $('#ccWeek').innerHTML = '<thead><tr><th>Họ tên</th>' + days.map((d, i) => `<th>${esc(d)}${i === H.todayIdx ? ' (ngày chạy)' : ''}</th>`).join('') + '</tr></thead><tbody>' +
+      S.staff.map(st => `<tr><td>${esc(st.ten)}</td>` + days.map((d, i) => `<td><select id="wk_${eid(st.id)}_${i}" data-wk="${esc(st.id)}" data-d="${i}" aria-label="${esc(st.ten)} ngày ${esc(d)}">${LV.map((l, k) => `<option value="${k}"${D.week[st.id][i] === k ? ' selected' : ''}>${l}</option>`).join('')}</select></td>`).join('') + '</tr>').join('') + '</tbody>';
+    renderMgr();
+  }
+  const touch = () => { const d = new Date(), p = n => String(n).padStart(2, '0'); S.stamp = p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()); };
+  const initials = s => fold(s).split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || 'TT';
+  const sharedWith = g => S.groups.find(o => o !== g && !o.skip && (o.mk || o.k) === (g.mk || g.k) && S.groups.indexOf(o) < S.groups.indexOf(g));
+  function renderCD() {
+    const byCert = c => WORK.filter(g => g.cert === c.k);
+    $('#certMgr').innerHTML = '<span class="muted">Loại chứng chỉ:</span>' + S.certs.map(c => `<span class="row" style="gap:4px"><input type="text" id="cnm_${c.k}" data-cname="${c.k}" value="${esc(c.label)}" size="18" aria-label="Tên chứng chỉ"><button type="button" class="small" data-delcert="${c.k}">${App.delAsk === 'c:' + c.k ? 'Bấm lần nữa để xóa' : 'Xóa'}</button></span>`).join('') +
+      '<span class="row" style="gap:4px"><input type="text" id="certNew" placeholder="Tên chứng chỉ mới" size="18" aria-label="Tên chứng chỉ mới"><button type="button" class="small" id="certAdd">Thêm chứng chỉ</button></span>';
+    $('#certMsg').textContent = App.certMsg || '';
+    $('#certTable').innerHTML = '<thead><tr><th rowspan="2">Họ tên</th>' + S.certs.map(c => `<th colspan="${byCert(c).length + 3}">${esc(c.label)}</th>`).join('') + '</tr><tr>' +
+      S.certs.map(c => '<th class="c">Có chứng chỉ</th>' + byCert(c).map(g => `<th class="c">${esc(g.label)}</th>`).join('') + '<th>Số chứng chỉ</th><th>Ngày hết hạn</th>').join('') + '</tr></thead><tbody>' +
+      S.staff.map(st => { const k = eid(st.id); return `<tr><td>${esc(st.ten)}</td>` + S.certs.map(c => { const gs = byCert(c), has = !!st.cc[c.k].co, ex = expired(st, c.k), nr = nearExp(st, c.k);
+        return `<td class="c"><input type="checkbox" id="cg_${k}_${c.k}" data-cg="${esc(st.id)}" data-c="${c.k}"${has ? ' checked' : ''} aria-label="${esc(st.ten)} có chứng chỉ ${esc(c.label)}"></td>` +
+          gs.map(g => `<td class="c"><input type="checkbox" id="cn_${k}_${g.k}" data-cn="${esc(st.id)}" data-g="${g.k}"${holds(st, g) ? ' checked' : ''} aria-label="${esc(st.ten)} làm ${esc(g.label)}"></td>`).join('') +
+          `<td><input type="text" id="cs_${k}_${c.k}" data-cs="${esc(st.id)}" data-c="${c.k}" value="${esc(st.cc[c.k].so)}" size="10" aria-label="Số chứng chỉ ${esc(c.label)} của ${esc(st.ten)}"></td>` +
+          `<td><input type="date" id="ch_${k}_${c.k}" data-ch="${esc(st.id)}" data-c="${c.k}" value="${esc(st.cc[c.k].han)}" aria-label="Ngày hết hạn ${esc(c.label)} của ${esc(st.ten)}">${ex ? ' <span class="pill do">Hết hạn</span>' : nr ? ' <span class="pill vang">Sắp hết hạn</span>' : ''}</td>`; }).join('') + '</tr>'; }).join('') + '</tbody>';
+    $('#prioTable').innerHTML = '<thead><tr><th>Họ tên</th>' + WORK.map(g => `<th class="c">${esc(g.label)}</th>`).join('') + '</tr></thead><tbody>' +
+      S.staff.map(st => `<tr><td>${esc(st.ten)}</td>` + WORK.map(g => canDo(st, g) ? `<td class="c"><select id="pr_${eid(st.id)}_${g.k}" data-pr="${esc(st.id)}" data-g="${g.k}" aria-label="Ưu tiên ${esc(st.ten)} làm ${esc(g.label)}">${[1, 2, 3].map(n => `<option${(st.prio[g.k] || 2) === n ? ' selected' : ''}>${n}</option>`).join('')}</select></td>` : '<td class="c muted">—</td>').join('') + '</tr>').join('') + '</tbody>';
+    const certName = k => (S.certs.find(c => c.k === k) || {}).label || 'chưa gán';
+    if (!App.svEdit) {
+      $('#svcTable').innerHTML = '<thead><tr><th>Thủ thuật</th><th>Chứng chỉ</th><th>Thực hiện</th><th>Lưu, theo dõi</th><th>Tổng</th><th>Máy dùng được hôm nay</th></tr></thead><tbody>' +
+        (WORK.length ? WORK.map(g => { const sw = sharedWith(g), ml = mayList(g);
+          return `<tr><td>${esc(g.label)}</td><td>${esc(certName(g.cert))}</td><td>${g.busy} phút</td><td>${g.dur - g.busy ? g.dur - g.busy + ' phút' : '—'}</td><td>${g.dur} phút</td><td class="wrapcell">${sw && ml ? '<span class="muted">dùng chung máy với ' + esc(sw.label.toLowerCase()) + '</span>' : ml ? ml.map(m => `<label for="my_${eid(m)}"><input type="checkbox" id="my_${eid(m)}" data-may="${esc(m)}"${S.mayOff.indexOf(m) < 0 ? ' checked' : ''}> ${esc(m)}</label>`).join(' ') : '<span class="muted">không dùng máy</span>'}</td></tr>`; }).join('')
+          : '<tr><td colspan="6" class="empty">Chưa có thủ thuật nào đang dùng. Bấm Cập nhật để xem và sửa toàn bộ danh sách.</td></tr>') + '</tbody>';
+    } else {   // chế độ cập nhật: hiện toàn bộ thủ thuật, sửa được thời gian, chứng chỉ, từ khóa và mã máy
+      $('#svcTable').innerHTML = '<thead><tr><th>Tên thủ thuật</th><th>Từ khóa trong tên dịch vụ HIS</th><th>Thực hiện (phút)</th><th>Tổng (phút)</th><th>Chứng chỉ</th><th>Mã máy</th><th></th></tr></thead><tbody>' +
+        S.groups.filter(g => !g.skip).map(g => { const sw = sharedWith(g), ml = mayList(g) || [];
+          return `<tr><td><input type="text" id="gl_${g.k}" data-ge="${g.k}" data-f="label" value="${esc(g.label)}" size="20" aria-label="Tên thủ thuật"></td>` +
+            `<td><input type="text" id="gk_${g.k}" data-ge="${g.k}" data-f="kw" value="${esc((g.kw || []).join(', '))}" size="22" aria-label="Từ khóa của ${esc(g.label)}"></td>` +
+            `<td><input type="number" id="gb_${g.k}" data-ge="${g.k}" data-f="busy" value="${g.busy}" min="1" max="240" aria-label="Phút thực hiện của ${esc(g.label)}"></td>` +
+            `<td><input type="number" id="gd_${g.k}" data-ge="${g.k}" data-f="dur" value="${g.dur}" min="1" max="240" aria-label="Tổng phút của ${esc(g.label)}"></td>` +
+            `<td><select id="gc_${g.k}" data-ge="${g.k}" data-f="cert" aria-label="Chứng chỉ của ${esc(g.label)}">${S.certs.map(c => `<option value="${c.k}"${c.k === g.cert ? ' selected' : ''}>${esc(c.label)}</option>`).join('')}</select></td>` +
+            `<td class="wrapcell">${sw ? '<span class="muted">dùng chung máy với ' + esc(sw.label.toLowerCase()) + '</span>' : ml.map(m => `<span class="tag">${esc(m)}<button type="button" data-delmay="${esc(m)}" data-g="${g.k}" aria-label="Bỏ máy ${esc(m)}">×</button></span>`).join(' ') + ` <input type="text" id="gm_${g.k}" data-addmay="${g.k}" placeholder="Thêm mã máy" size="14" aria-label="Thêm mã máy cho ${esc(g.label)}">`}</td>` +
+            `<td><button type="button" class="small" data-delg="${g.k}">${App.delAsk === 'g:' + g.k ? 'Bấm lần nữa để xóa' : 'Xóa'}</button></td></tr>`; }).join('') + '</tbody>';
+    }
+    $('#svEdit').textContent = App.svEdit ? 'Xong' : 'Cập nhật'; $('#svFoot').hidden = !App.svEdit && !App.svMsg; $('#svAdd').hidden = !App.svEdit; $('#svMsg').textContent = App.svMsg || '';
+    $('#mayFetch').hidden = !H.fetchMachines; $('#mayFetch').disabled = App.running || !H.tickets.length;
+    $('#svStamp').textContent = S.stamp ? 'Cập nhật lần cuối: ' + S.stamp : '';
+    $('#svHelp').textContent = App.svEdit ? 'Sửa xong một ô thì bấm ra ngoài ô để ghi nhận. Thời gian lưu, theo dõi bằng tổng trừ thực hiện. Từ khóa là cụm chữ có trong tên dịch vụ trên HIS, cách nhau bằng dấu phẩy.' : 'Thời gian theo Phụ lục 1 của bệnh viện. Bỏ tích máy hỏng hoặc đang bảo trì. Bấm Cập nhật để sửa thời gian, thêm thủ thuật hoặc thêm bớt mã máy.';
+    $('#pA0').value = hm(S.shifts[0][0]); $('#pA1').value = hm(S.shifts[0][1]); $('#pB0').value = hm(S.shifts[1][0]); $('#pB1').value = hm(S.shifts[1][1]);
+    $('#pLead').value = S.lead; $('#pGapPerf').value = S.gapPerf; $('#pGapBn').value = S.gapBn; $('#pGapMay').value = S.gapMay; $('#pNew').value = S.newBlock; $('#pSpread').value = S.spread ? '1' : '0';
+    $('#cfgText').value = JSON.stringify(S);
+  }
+  // Sửa thủ thuật, mã máy, loại chứng chỉ
+  function cdEdit(e) {
+    const d = e.target.dataset, v = e.target.value;
+    if (d.ge) {
+      const g = S.groups.find(x => x.k === d.ge); if (!g) return false;
+      if (d.f === 'label') { g.label = v.trim() || g.label; if (g.custom) g.code = initials(g.label); }
+      else if (d.f === 'kw') g.kw = v.split(',').map(s => s.trim()).filter(Boolean);
+      else if (d.f === 'busy') { g.busy = Math.max(1, Math.round(+v) || 1); if (g.busy > g.dur) g.dur = g.busy; }
+      else if (d.f === 'dur') { g.dur = Math.max(1, Math.round(+v) || 1); if (g.busy > g.dur) g.busy = g.dur; }
+      else if (d.f === 'cert') g.cert = v;
+      touch(); return true;
+    }
+    if (d.addmay) { const g = S.groups.find(x => x.k === d.addmay), code = v.trim(); if (!g || !code) return false; const key = g.mk || g.k, a = S.may[key] = S.may[key] || []; if (a.indexOf(code) < 0) { a.push(code); a.sort(); } touch(); return true; }
+    if (d.cname) { const c = S.certs.find(x => x.k === d.cname); if (!c) return false; c.label = v.trim() || c.label; touch(); return true; }
+    return false;
+  }
+  function cdClick(e) {
+    const d = e.target.dataset, id = e.target.id;
+    if (id === 'mayFetch') { runMayFetch(); return; }
+    if (id === 'svEdit') { App.svEdit = !App.svEdit; App.delAsk = null; App.svMsg = ''; renderAll(); return; }
+    if (id === 'svAdd') { const k = 'g' + Date.now().toString(36); S.groups.push({ k, code: 'TT', label: 'Thủ thuật mới', kw: [], dur: 15, busy: 5, cert: S.certs[0].k, pin: true, custom: true }); App.svMsg = 'Đã thêm một dòng ở cuối bảng. Điền tên, từ khóa và thời gian cho thủ thuật mới.'; touch(); dirty(); return; }
+    if (d.delmay != null) { const g = S.groups.find(x => x.k === d.g), key = g.mk || g.k; S.may[key] = (S.may[key] || []).filter(m => m !== d.delmay); S.mayOff = S.mayOff.filter(m => m !== d.delmay); touch(); dirty(); return; }
+    if (d.delg != null) {
+      if (App.delAsk !== 'g:' + d.delg) { App.delAsk = 'g:' + d.delg; renderCD(); return; }
+      const g = S.groups.find(x => x.k === d.delg); App.delAsk = null;
+      S.groups = S.groups.filter(x => x.k !== d.delg); S.staff.forEach(p => { delete p.can[d.delg]; delete p.prio[d.delg]; });
+      App.svMsg = 'Đã xóa thủ thuật ' + (g ? g.label : '') + '. Ca thuộc thủ thuật này sẽ báo chưa có quy tắc thời gian.'; touch(); dirty(); return;
+    }
+    if (id === 'certAdd') { const name = $('#certNew').value.trim(); if (!name) { App.certMsg = 'Chưa gõ tên chứng chỉ mới.'; renderCD(); return; } const k = 'c' + Date.now().toString(36); S.certs.push({ k, label: name }); S.staff.forEach(ensureStaff); App.certMsg = 'Đã thêm chứng chỉ ' + name + '. Tích ô Có chứng chỉ cho những người có nó; bấm Cập nhật ở bảng Thủ thuật và máy để gán thủ thuật cho chứng chỉ này.'; touch(); dirty(); return; }
+    if (d.delcert != null) {
+      const c = S.certs.find(x => x.k === d.delcert), n = S.groups.filter(g => g.cert === d.delcert).length;
+      if (S.certs.length <= 1) { App.certMsg = 'Phải còn ít nhất một loại chứng chỉ.'; renderCD(); return; }
+      if (n) { App.certMsg = 'Còn ' + n + ' thủ thuật thuộc chứng chỉ ' + c.label + '. Chuyển chúng sang chứng chỉ khác rồi mới xóa được.'; App.delAsk = null; renderCD(); return; }
+      if (App.delAsk !== 'c:' + d.delcert) { App.delAsk = 'c:' + d.delcert; renderCD(); return; }
+      App.delAsk = null; S.certs = S.certs.filter(x => x.k !== d.delcert); App.certMsg = 'Đã xóa chứng chỉ ' + c.label + '.'; touch(); dirty();
+    }
+  }
+  // Phiếu sót: thủ thuật của các ngày trước vẫn chưa được cập nhật (bộ nối cung cấp danh sách)
+  function renderSot() {
+    const m = H.missed || [];
+    $('#sotBox').hidden = !m.length; if (!m.length) return;
+    $('#sotTitle').textContent = 'Phiếu sót của các ngày trước: ' + m.length + ' thủ thuật chưa cập nhật';
+    $('#sotTable').innerHTML = '<thead><tr><th>Ngày chỉ định</th><th>Người bệnh</th><th>Mã BA</th><th>Thủ thuật</th><th>BS chỉ định</th><th>Ghi chú</th></tr></thead><tbody>' +
+      m.map(x => `<tr><td>${esc(x.ngay)}</td><td>${esc(x.tenBN)}</td><td>${esc(x.maBA)}</td><td>${esc(x.ten)}</td><td>${esc(x.bs || '')}</td><td>${x.cu ? 'còn giờ cũ' : 'chưa có giờ'}</td></tr>`).join('') + '</tbody>';
+  }
+  // Đọc danh sách mã máy từ form của HIS cho từng thủ thuật có ca trong ngày. Máy mới được thêm ở trạng thái chưa tích, vì HIS có thể liệt kê cả máy của nơi khác.
+  async function runMayFetch() {
+    if (App.running || !H.fetchMachines) return;
+    const probes = [], seen = new Set();
+    WORK.forEach(g => { const key = g.mk || g.k; if (seen.has(key)) return; const mine = workTickets().filter(x => (groupOf(x.ten) || {}).k === g.k), t = mine.find(x => x.tt !== 3) || mine[0]; if (t) { seen.add(key); probes.push({ mk: key, label: g.label, t }); } });
+    App.running = true; App.svMsg = 'Đang đọc danh sách máy từ HIS: app mở form của từng thủ thuật rồi đóng lại, không lưu...'; renderAll();
+    let res = {}, err = '';
+    try { res = await H.fetchMachines(probes); } catch (e) { err = e.message || String(e); }
+    let added = 0;
+    Object.keys(res).forEach(mk => { const a = S.may[mk] = S.may[mk] || []; (res[mk] || []).forEach(code => { if (a.indexOf(code) < 0) { a.push(code); if (S.mayOff.indexOf(code) < 0) S.mayOff.push(code); added++; } }); a.sort(); });
+    App.running = false;
+    App.svMsg = err ? 'Không đọc được danh sách máy: ' + err : added ? 'Đã thêm ' + added + ' mã máy từ HIS, đang để chưa tích. Hãy tích những máy khoa thực sự dùng.' : 'HIS không có mã máy nào ngoài các máy đã có trong bảng.';
+    log(App.svMsg); if (added) touch(); dirty();
+  }
+  function renderPerfFilter() { const v = $('#planPerf').value; $('#planPerf').innerHTML = '<option value="">Mọi người làm</option>' + S.staff.map(s => `<option value="${esc(s.id)}">${esc(s.ten)}</option>`).join(''); $('#planPerf').value = v; }
+  function renderAll() { refreshWork(); renderPerfFilter(); renderTiles(); renderSot(); renderBlocks(); renderPlan(); renderBn(); renderDs(); renderTrung(); renderLam(); renderTL(); renderCC(); renderCD(); }
+
+  /* ---------- sự kiện ---------- */
+  const TABS = ['run', 'bn', 'trung', 'lam', 'ds', 'cc', 'cd'];
+  function showTab(k) {
+    if (k === 'tl') k = 'lam';   // thanh thời gian giờ nằm chung thẻ Thời gian làm
+    if (TABS.indexOf(k) < 0) k = 'run';
+    Array.from($('#tabs').querySelectorAll('button')).forEach(b => b.setAttribute('aria-selected', b.dataset.tab === k ? 'true' : 'false'));
+    TABS.forEach(t => { $('#tab-' + t).hidden = t !== k; });
+    try { localStorage.setItem('xg-tab', k); } catch (e) {}
+  }
+  const tid = v => { const t = H.tickets.find(x => String(x.id) === String(v)); return t ? t.id : v; };
+  $('#tabs').addEventListener('click', e => { const b = e.target.closest('button[data-tab]'); if (b) showTab(b.dataset.tab); });
+  $('#btnGoAll').addEventListener('click', () => { App.goAsk = true; renderTiles(); });   // luôn hỏi lại trước khi ghi vào HIS
+  $('#goAsk').addEventListener('click', e => { const v = e.target.dataset.go; if (!v) return; if (v === 'no') { App.goAsk = false; renderTiles(); } else runGoAll(v === '1' ? 1 : 0); });
+  $('#btnPlan').addEventListener('click', () => {
+    const res = buildPlan(null), n = s => res.filter(r => r.status === s).length;
+    log(`Xếp giờ cả khoa: ${n('planned')} ca đã xếp, ${n('stuck')} ca kẹt.`);
+    runCheck(true);
+  });
+  $('#btnFill').addEventListener('click', () => askFill(null));
+  $('#fillAsk').addEventListener('click', e => { const v = e.target.dataset.fill; if (!v) return; const a = App.fillAsk || {}; if (v === 'no') { App.fillAsk = null; renderTiles(); } else runFill(a.scope || null, v === '1' ? 1 : 0); });
+  $('#btnStop').addEventListener('click', () => { App.stop = true; });
+  $('#btnCheck').addEventListener('click', () => runCheck()); $('#btnCheck2').addEventListener('click', () => runCheck());
+  $('#btnFix').addEventListener('click', runFix); $('#btnFix2').addEventListener('click', runFix);
+  $('#planPerf').addEventListener('change', renderPlan); $('#planSt').addEventListener('change', renderPlan);
+  $('#trungType').addEventListener('change', renderTrung); $('#lamPerf').addEventListener('change', () => { renderLam(); renderTL(); }); $('#lamGrp').addEventListener('change', renderLam); $('#tlMode').addEventListener('change', renderTL);
+  $('#plan').addEventListener('change', e => { const v = e.target.dataset.pin; if (v == null) return; const id = tid(v); if (e.target.value) App.manual.set(id, e.target.value); else App.manual.delete(id); buildPlan(null); runCheck(true); });   // buildPlan tự lưu
+  $('#plan').addEventListener('click', e => { const v = e.target.dataset.skip; if (v == null) return; const id = tid(v); if (App.skip.has(id)) App.skip.delete(id); else { App.skip.add(id); App.plan.delete(id); } savePlan(); renderAll(); });
+  $('#bkKind').addEventListener('change', renderBlocks);
+  $('#bkAdd').addEventListener('click', () => {
+    const kind = $('#bkKind').value, s = X.toMin($('#bkS').value), e = kind === 'rv' ? 1440 : X.toMin($('#bkE').value);
+    if (!$('#bkWho').value) { log('Chưa thêm được chặn giờ: chưa chọn người.'); return; }
+    if (s == null || e == null || e <= s) { log('Chưa thêm được chặn giờ: giờ đến phải sau giờ từ.'); return; }
+    D.blocks.push({ id: ++D.bkSeq, kind, who: $('#bkWho').value, s, e, note: kind === 'rv' ? 'Ra viện, xử trí' : kind === 'perf' ? 'Chặn người làm' : 'Chặn người bệnh', auto: false });
+    log('Đã thêm chặn giờ. Bấm Kiểm tra trùng để xem ca nào bị đụng.'); dirty();
+  });
+  $('#blocks').addEventListener('click', e => { const id = e.target.dataset.delbk; if (!id) return; D.blocks = D.blocks.filter(b => b.id !== +id); dirty(); });
+  $('#bnTable').addEventListener('change', e => { const b = e.target.dataset.selbn; if (!b) return; if (e.target.checked) App.sel.add(b); else App.sel.delete(b); });
+  $('#bnTable').addEventListener('click', e => { const b = e.target.dataset.runbn; if (b) runBn(new Set([b])); });
+  $('#btnRunSel').addEventListener('click', () => { if (!App.sel.size) { log('Chưa tích người bệnh nào để chạy riêng.'); showTab('run'); return; } runBn(new Set(App.sel)); });
+  $('#tab-cc').addEventListener('change', e => {
+    const d = e.target.dataset;
+    if (d.on) { D.on[d.on][+d.i] = e.target.checked; D.week[d.on][H.todayIdx] = lvOf(D.on[d.on]); }
+    else if (d.wk) { D.week[d.wk][+d.d] = +e.target.value; if (+d.d === H.todayIdx) D.on[d.wk] = onOf(+e.target.value); }
+    else if (d.nhom) { staffById(d.nhom).nhom = e.target.value; }
+    else return;
+    dirty();
+  });
+  $('#ccEdit').addEventListener('click', () => { App.ccEdit = !App.ccEdit; App.delAsk = null; App.stMsg = ''; renderAll(); });
+  ['#tab-cc', '#tab-cd'].forEach(s => { $(s).addEventListener('input', mgrInput); $(s).addEventListener('click', mgrClick); });
+  $('#tab-cd').addEventListener('click', cdClick);
+  $('#bnSearch').addEventListener('input', renderBn); $('#tlSearch').addEventListener('input', renderTL);
+  $('#dsSearch').addEventListener('input', renderDs); $('#dsSt').addEventListener('change', renderDs); $('#dsSort').addEventListener('change', renderDs);
+  $('#ccAll').addEventListener('click', () => { S.staff.forEach(st => { D.on[st.id] = [true, true]; D.week[st.id][H.todayIdx] = 0; }); dirty(); });
+  $('#ccPrev').addEventListener('click', () => { const p = Math.max(0, H.todayIdx - 1); S.staff.forEach(st => { D.week[st.id][H.todayIdx] = D.week[st.id][p]; D.on[st.id] = onOf(D.week[st.id][p]); }); dirty(); });
+  $('#tab-cd').addEventListener('change', e => {
+    const d = e.target.dataset, st = staffById(d.cg || d.cn || d.cs || d.ch || d.pr);
+    if (cdEdit(e)) { dirty(); return; }
+    if (d.nhom) staffById(d.nhom).nhom = e.target.value;
+    else if (d.cg) { st.cc[d.c].co = e.target.checked; if (e.target.checked) S.groups.filter(g => g.cert === d.c).forEach(g => { st.can[g.k] = true; }); }   // có chứng chỉ thì mặc định làm được mọi thủ thuật của nó
+    else if (d.cn) {
+      const g = S.groups.find(x => x.k === d.g), cc = st.cc[g.cert];
+      if (e.target.checked && !cc.co) { cc.co = true; S.groups.filter(x => x.cert === g.cert).forEach(x => { st.can[x.k] = false; }); }   // tích thủ thuật đầu tiên thì ghi nhận là có chứng chỉ, các thủ thuật khác vẫn để trống
+      st.can[d.g] = e.target.checked;
+    }
+    else if (d.cs) { st.cc[d.c].so = e.target.value; persist(); return; }
+    else if (d.ch) st.cc[d.c].han = e.target.value;
+    else if (d.pr) st.prio[d.g] = +e.target.value;
+    else if (d.may) { if (e.target.checked) S.mayOff = S.mayOff.filter(m => m !== d.may); else S.mayOff.push(d.may); }
+    else if (/^p[A-Z]/.test(e.target.id || '')) {
+      const t = id => X.toMin($(id).value), n = id => Math.max(0, +$(id).value || 0);
+      const a0 = t('#pA0'), a1 = t('#pA1'), b0 = t('#pB0'), b1 = t('#pB1');
+      if (a0 != null && a1 > a0 && b0 >= a1 && b1 > b0) S.shifts = [[a0, a1], [b0, b1]];
+      Object.assign(S, { lead: n('#pLead'), gapPerf: n('#pGapPerf'), gapBn: n('#pGapBn'), gapMay: n('#pGapMay'), newBlock: n('#pNew'), spread: $('#pSpread').value === '1' });
+      autoBlocks();
+    } else return;
+    dirty();
+  });
+  $('#cfgCopy').addEventListener('click', () => { const el = $('#cfgText'); el.select(); const sel = () => { $('#cfgMsg').textContent = 'Đã bôi đen, bấm Ctrl+C để chép.'; }; try { navigator.clipboard.writeText(el.value).then(() => { $('#cfgMsg').textContent = 'Đã sao chép.'; }, sel); } catch (err) { sel(); } });
+  $('#cfgLoad').addEventListener('click', () => { try { const o = JSON.parse($('#cfgText').value); if (!o.staff || !o.shifts) throw 0; Object.assign(S, o); S.staff.forEach(ensureStaff); $('#cfgMsg').textContent = 'Đã nạp cài đặt.'; autoBlocks(); dirty(); } catch (err) { $('#cfgMsg').textContent = 'Nội dung không phải file cài đặt hợp lệ.'; } });
+  const tip = $('#tip');
+  $('#tl').addEventListener('pointermove', e => { const b = e.target.closest('[data-tip]'); if (!b) { tip.hidden = true; return; } tip.textContent = b.dataset.tip; tip.hidden = false; tip.style.left = Math.min(e.clientX + 12, window.innerWidth - 330) + 'px'; tip.style.top = (e.clientY + 14) + 'px'; });
+  $('#tl').addEventListener('pointerleave', () => { tip.hidden = true; });
+  $('#tl').addEventListener('click', e => {
+    const b = e.target.closest('[data-tip]'); if (b) { $('#tlInfo').textContent = b.dataset.tip; return; }
+    const l = e.target.closest('[data-lane]'); if (l) { $('#lamPerf').value = $('#lamPerf').value === l.dataset.lane ? '' : l.dataset.lane; renderLam(); renderTL(); }
+  });
+
+  // boot: gọi khi mở app hoặc khi vừa tải xong danh sách của một ngày
+  function boot(keepSettings) {
+    if (!keepSettings) defaults(); else S.staff.forEach(ensureStaff);
+    refreshWork(); resetApp(); if (H.loadFilled) App.filled = new Set(H.loadFilled());   // nhớ các ca app đã điền trong ngày, để không gỡ xanh nhầm
+    restorePlan();
+    autoBlocks(); renderAll();
+  }
+  function tick() {
+    if (!H.canFill || H.noAuto || App.running || App.dirty || App.autoStop || !$('#autoFill').checked) return;
+    if (fillStat(null).due) runFill(null, 0, true);
+  }
+  function clock() { App.plan.forEach(r => { r.wait = false; }); renderAll(); if (H.canFill && !H.noAuto && $('#autoFill').checked && !App.dirty) runFill(); }
+  return { S, D, App, X, boot, clock, tick, fillStat, changed, dirty, log, groupOf, mayList, staffName, staffById, ensureStaff, renderAll, showTab, cfg, staffEng, blocksEng, curRows, buildPlan, runFill, runGoAll, runCheck, runFix, runBn, autoBlocks, persist };
+}
+/* CORE-END */
+
+/* ================= BẢN MÔ PHỎNG: HIS giả và bộ nối tới phần app ================= */
+const $ = s => document.querySelector(s);
+const hm = X.toHM;
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const seq = (p, n) => Array.from({ length: n }, (_, i) => p + '-' + String(i + 1).padStart(2, '0'));
+const MAY_DX = seq('DX', 4);
+// dur = tổng thời gian, busy = thời gian người làm trực tiếp làm (Phụ lục 1 của bệnh viện)
+const GROUPS = [
+  { k: 'st', label: 'Sắc thuốc', kw: ['sắc thuốc'], re: /sắc thuốc/i, skip: true },
+  { k: 'tc', code: 'TC', label: 'Thủy châm', kw: ['thủy châm','thuỷ châm'], re: /th(ủy|uỷ) châm/i, dur: 25, busy: 10, cert: 'yhct' },
+  { k: 'hc', code: 'HC', label: 'Hào châm', kw: ['hào châm'], re: /hào châm/i, dur: 25, busy: 5, cert: 'yhct' },
+  { k: 'dc', code: 'ĐC', label: 'Điện châm', kw: ['điện châm'], re: /điện châm/i, dur: 25, busy: 5, may: seq('DC', 7), cert: 'yhct' },
+  { k: 'hn', code: 'HN', label: 'Tia hồng ngoại', kw: ['hồng ngoại'], re: /hồng ngoại/i, dur: 15, busy: 3, may: seq('HN', 6), cert: 'yhct' },
+  { k: 'nt', code: 'NT', label: 'Ngâm thuốc', kw: ['ngâm thuốc'], re: /ngâm thuốc/i, dur: 15, busy: 5, cert: 'yhct' },
+  { k: 'bt', code: 'BT', label: 'Bó thuốc', kw: ['bó thuốc'], re: /bó thuốc/i, dur: 30, busy: 5, cert: 'yhct' },
+  { k: 'xb', code: 'XB', label: 'Xoa bóp bấm huyệt', kw: ['xoa bóp'], re: /xoa bóp/i, dur: 20, busy: 20, cert: 'yhct' },
+  { k: 'dx', code: 'ĐX', label: 'Điện xung', kw: ['điện xung'], re: /điện xung/i, dur: 15, busy: 5, may: MAY_DX, cert: 'phcn' },
+  { k: 'sa', code: 'SA', label: 'Siêu âm', kw: ['siêu âm'], re: /siêu âm/i, dur: 15, busy: 15, may: MAY_DX, cert: 'phcn' },
+  { k: 'sn', code: 'SN', label: 'Sóng ngắn', kw: ['sóng ngắn'], re: /sóng ngắn/i, dur: 15, busy: 5, may: ['SN-01'], cert: 'phcn' }
+];
+const mockGroupOf = name => { const n = String(name || '').normalize('NFC'); return GROUPS.find(g => g.re.test(n)) || null; };
+function seedStaff() {
+  const mk = (id, ten, nhom, list, prio) => ({ id, user: 'YHCTVP.' + id.toUpperCase(), ten, nhom, can: Object.fromEntries(list.map(k => [k, true])), prio: prio || {}, cc: { yhct: { so: '', han: '' }, phcn: { so: '', han: '' } } });
+  const Y = ['tc', 'hc', 'dc', 'hn', 'nt', 'bt'], P = ['dx', 'sa', 'sn'];
+  const staff = [
+    mk('an', 'BS. An', 'Bác sĩ', Y, { tc: 1, hc: 1, dc: 1 }), mk('binh', 'BS. Bình', 'Bác sĩ', Y, { tc: 1, hc: 1, dc: 1 }),
+    mk('chi', 'BS. Chi', 'Bác sĩ', Y.concat(P), { dx: 3, sa: 3, sn: 3 }), mk('dung', 'BS. Dung', 'Bác sĩ', Y.concat(P), { dx: 3, sa: 3, sn: 3 }),
+    mk('giang', 'KTV. Giang', 'Kỹ thuật viên', P, { dx: 1, sa: 1, sn: 1 }), mk('hai', 'KTV. Hải', 'Kỹ thuật viên', P, { dx: 1, sa: 1, sn: 1 }),
+    mk('lan', 'ĐD. Lan', 'Điều dưỡng', ['xb']), mk('minh', 'ĐD. Minh', 'Điều dưỡng', ['xb'])
+  ];
+  staff[0].cc.yhct = { so: 'YHCT-0231', han: '' }; staff[2].cc.phcn = { so: 'PHCN-0412', han: '2028-06-30' }; staff[5].cc.phcn = { so: 'PHCN-0977', han: '2026-12-05' };
+  const on = {}, week = {};
+  staff.forEach(st => {
+    on[st.id] = st.id === 'lan' ? [true, false] : st.id === 'minh' ? [false, true] : [true, true];
+    week[st.id] = [0, 1, 2, 3, 4, 5, 6].map(d => st.id === 'lan' ? 1 : st.id === 'minh' ? 2 : (d === 6 && st.nhom === 'Bác sĩ' && st.id !== 'an') ? 3 : 0);
+  });
+  const groups = GROUPS.map(g => ({ k: g.k, code: g.code, label: g.label, kw: g.kw, dur: g.dur, busy: g.busy, cert: g.cert, mk: g.k === 'sa' ? 'dx' : g.k, skip: !!g.skip }));
+  const may = {}; GROUPS.forEach(g => { if (g.may && g.k !== 'sa') may[g.k] = g.may.slice(); });
+  return { staff, on, week, groups, certs: [{ k: 'yhct', label: 'Y học cổ truyền' }, { k: 'phcn', label: 'Phục hồi chức năng' }], may };
+}
+
+const HIS = { tickets: [], pats: new Map(), now: 725, sel: null };
+const hisById = id => HIS.tickets.find(t => t.id === id);
+let core;
+const sName = id => core ? core.staffName(id) : id;
+
+function genData() {
+  let seed = 20261117;
+  const rnd = n => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
+  const staff = seedStaff().staff;
+  const COMBOS = [
+    ['Điện châm [kim ngắn]', 'Điều trị bằng tia hồng ngoại', 'Điều trị bằng các dòng điện xung', 'Thủy châm', 'Ngâm thuốc YHCT bộ phận', 'Xoa bóp bấm huyệt điều trị hội chứng vai gáy'],
+    ['Thủy châm', 'Điều trị bằng tia hồng ngoại', 'Ngâm thuốc YHCT bộ phận', 'Bó thuốc', 'Điện châm [kim ngắn]'],
+    ['Điện châm [kim ngắn]', 'Điều trị bằng sóng ngắn', 'Điều trị bằng các dòng điện xung', 'Thủy châm', 'Điều trị bằng tia hồng ngoại'],
+    ['Hào châm', 'Điều trị bằng siêu âm', 'Ngâm thuốc YHCT bộ phận', 'Xoa bóp bấm huyệt điều trị đau lưng']
+  ];
+  const pick = [0, 1, 0, 2, 1, 0, 3, 1, 0, 2, 1, 0, 3, 2, 0, 1, 0, 2, 1, 3, 0, 1, 2, 0, 1, 3, 0, 2];
+  const BS = ['an', 'binh', 'chi'];
+  const NEW = { 6: 500, 14: 540, 20: 640, 27: 820 };   // người bệnh vào viện trong ngày: giờ vào
+  const tickets = []; let id = 0; HIS.pats = new Map();
+  const base = (p, cd, ten) => ({ id: ++id, soPhieu: 'P' + String(110400 + id), maBA: p.maBA, tenBN: p.ten, bn: p.bn, bsId: p.bsId, cd, ten, tt: 2, vet: false, perf: null, s: null, e: null, may: null, sao: false, auto: false });
+  pick.forEach((c, i) => {
+    const p = { bn: 'bn' + (i + 1), ten: 'Người bệnh ' + String(i + 1).padStart(2, '0'), maBA: 'BA' + String(2600100 + i), bsId: BS[i % 3], vao: NEW[i] != null ? NEW[i] : null };
+    HIS.pats.set(p.bn, p);
+    const cd = p.vao != null ? p.vao + 12 : 425 + rnd(130);
+    const copy = p.vao == null && i % 4 === 1;
+    COMBOS[c].forEach((dv, j) => {
+      const g = mockGroupOf(dv), t = base(p, cd + j, dv);
+      if (copy) {   // phiếu sao từ hôm trước: mang theo giờ và người làm cũ; một nửa còn xanh, một nửa đã được gỡ từ trước
+        const who = staff.filter(st => st.can[g.k]); let s = Math.max(t.cd + 5, 455 + rnd(230)); if (rnd(2)) s = 785 + rnd(170);
+        t.perf = who[rnd(who.length)].id; t.s = s; t.e = s + g.dur; t.may = g.may ? g.may[rnd(g.may.length)] : null;
+        if (i % 8 === 1) { t.tt = 3; t.sao = true; } else t.vet = true;
+      }
+      tickets.push(t);
+    });
+    if (i % 9 === 4) tickets.push(Object.assign(base(p, cd + 8, 'Sắc thuốc thang và đóng gói thuốc bằng máy'), { tt: 3, perf: 'oanh', s: cd + 20, e: cd + 30, auto: true }));
+  });
+  tickets.push(base(HIS.pats.get('bn4'), 16 * 60 + 15, 'Thủy châm'));   // chỉ định muộn, không kịp xong trước 16:30
+  HIS.tickets = tickets; HIS.sel = null;
+}
+
+// HIS báo trùng khi cùng người thực hiện có ca khác chồng giờ trên cả khoảng bắt đầu–kết thúc, kể cả giờ cũ của phiếu đã gỡ xanh.
+function hisCheckTrung(t, perf, s, e) {
+  return HIS.tickets.filter(o => o.id !== t.id && (o.tt === 3 || o.vet) && o.perf === perf && s < o.e && o.s < e).map(o => ({ bn: o.tenBN, ten: o.ten, s: o.s, e: o.e, vet: o.vet }));
+}
+function hisSave(id, f, force) {
+  const t = hisById(id);
+  if (!t) return { error: 'Không tìm thấy phiếu.' };
+  if (t.auto) return { error: 'Dịch vụ này do hệ thống tự cập nhật, không sửa tay.' };
+  if (!f.perf) return { error: 'Chưa chọn người thực hiện.' };
+  if (f.s == null || f.e == null) return { error: 'Chưa nhập đủ thời gian thực hiện và kết thúc.' };
+  if (f.e <= f.s) return { error: 'Thời gian kết thúc phải sau thời gian thực hiện.' };
+  if (f.s < t.cd) return { error: 'Thời gian thực hiện không được trước thời gian chỉ định (' + hm(t.cd) + ').' };
+  if (!force) { const c = hisCheckTrung(t, f.perf, f.s, f.e); if (c.length) return { confirm: c }; }
+  Object.assign(t, { perf: f.perf, s: f.s, e: f.e, may: f.may || null, tt: 3, vet: false, sao: false });
+  return { ok: true };
+}
+function hisGo(id) {
+  const t = hisById(id);
+  if (!t || t.tt !== 3) return { error: 'Phiếu PTTT chưa được hoàn thành nên không thể gỡ hoàn thành!' };
+  if (t.auto) return { error: 'Dịch vụ này do hệ thống tự cập nhật, không gỡ tay.' };
+  t.tt = 2; t.vet = true; t.sao = false;   // phiếu về vàng, dịch vụ vẫn giữ giờ và người làm cũ
+  return { ok: true };
+}
+
+/* ---------- giao diện HIS mô phỏng ---------- */
+function hisRowHtml(t) {
+  const cls = (t.tt === 3 ? 'xanh' : 'vang') + (HIS.sel === t.id ? ' sel' : '');
+  const tag = t.auto ? ' <span class="tag">tự cập nhật</span>' : t.sao ? ' <span class="tag">sao phiếu</span>' : t.vet ? ' <span class="tag">giờ cũ</span>' : '';
+  const o = t.vet ? ' class="old"' : '';
+  return `<tr class="${cls}" data-id="${t.id}" tabindex="0"><td><span class="pill ${t.tt === 3 ? 'xanh' : 'vang'}">${t.tt === 3 ? 'Đã hoàn thành' : 'Đã gửi phiếu'}</span>${tag}</td>` +
+    `<td>${esc(t.maBA)}</td><td>${esc(t.tenBN)}</td><td>${esc(t.soPhieu)}</td><td>${esc(t.ten)}</td><td>${esc(sName(t.bsId))}</td><td>${hm(t.cd)}</td>` +
+    `<td${o}>${esc(sName(t.perf))}</td><td${o}>${hm(t.s)}</td><td${o}>${hm(t.e)}</td><td${o}>${esc(t.may || '')}</td></tr>`;
+}
+function renderHis() {
+  const f = $('#hisFilter').value, rows = HIS.tickets.filter(t => !f || String(t.tt) === f);
+  $('#hisGrid').innerHTML = '<thead><tr><th>Trạng thái</th><th>Mã BA</th><th>Người bệnh</th><th>Số phiếu</th><th>Dịch vụ</th><th>BS chỉ định</th><th>TG chỉ định</th><th>Người thực hiện</th><th>TG thực hiện</th><th>TG kết thúc</th><th>Mã máy</th></tr></thead><tbody>' +
+    (rows.length ? rows.map(hisRowHtml).join('') : '<tr><td colspan="11" class="empty">Không có phiếu nào ở trạng thái này.</td></tr>') + '</tbody>';
+  renderHisInfo();
+}
+function renderHisRow(id) {
+  const tr = $('#hisGrid tr[data-id="' + id + '"]'), t = hisById(id);
+  if (!tr || !t) { renderHis(); return; }
+  const f = $('#hisFilter').value;
+  if (f && String(t.tt) !== f) tr.remove(); else tr.outerHTML = hisRowHtml(t);
+  renderHisInfo();
+}
+function renderHisInfo() {
+  const x = HIS.tickets.filter(t => t.tt === 3).length, v = HIS.tickets.filter(t => t.vet).length;
+  $('#hisInfo').textContent = `Ngày 17/11/2026 · ${HIS.tickets.length} phiếu · ${x} xanh · ${HIS.tickets.length - x} vàng, trong đó ${v} phiếu còn giữ giờ cũ`;
+}
+function hisSelect(id) {
+  const old = HIS.sel; HIS.sel = id;
+  if (old != null && old !== id) { const o = $('#hisGrid tr[data-id="' + old + '"]'); if (o) o.classList.remove('sel'); }
+  const tr = $('#hisGrid tr[data-id="' + id + '"]'); if (tr) tr.classList.add('sel');
+}
+const UI = { ticket: null, pending: null };
+function closeModal() { $('#modal').hidden = true; UI.ticket = null; UI.pending = null; }
+function showConfirm(text, items, onYes) {
+  $('#cfText').textContent = text;
+  $('#cfList').innerHTML = (items || []).map(c => '<li>' + esc(c) + '</li>').join('');
+  UI.pending = onYes; $('#formBox').hidden = true; $('#cfBox').hidden = false; $('#modal').hidden = false;
+}
+function hisOpenForm() {
+  const t = hisById(HIS.sel);
+  if (!t) { showConfirm('Chưa chọn phiếu PTTT.', [], null); return; }
+  UI.ticket = t.id; const g = mockGroupOf(t.ten) || {};
+  $('#fInfo').textContent = `${t.tenBN} · ${t.ten} · chỉ định lúc ${hm(t.cd)} bởi ${sName(t.bsId)}`;
+  $('#fStart').value = hm(t.s); $('#fEnd').value = hm(t.e);
+  $('#fPerf').innerHTML = '<option value="">-- Chọn --</option>' + core.S.staff.map(s => `<option value="${s.id}">${esc(s.ten)}</option>`).join('');
+  $('#fPerf').value = t.perf && t.perf !== 'oanh' ? t.perf : '';
+  $('#fMay').innerHTML = '<option value="">(không dùng máy)</option>' + (g.may || []).map(m => `<option>${m}</option>`).join('');
+  $('#fMay').value = t.may || '';
+  $('#fErr').hidden = true; $('#formBox').hidden = false; $('#cfBox').hidden = true; $('#modal').hidden = false;
+}
+function hisFormSave(force) {
+  const id = UI.ticket;
+  const r = hisSave(id, { perf: $('#fPerf').value, s: X.toMin($('#fStart').value), e: X.toMin($('#fEnd').value), may: $('#fMay').value }, force);
+  if (r.error) { $('#cfBox').hidden = true; $('#formBox').hidden = false; $('#fErr').textContent = r.error; $('#fErr').hidden = false; return; }
+  if (r.confirm) {
+    showConfirm('Người thực hiện đã có thủ thuật trùng thời gian. Bạn có muốn thực hiện tiếp không?',
+      r.confirm.map(c => `${hm(c.s)}–${hm(c.e)} · ${c.ten} · ${c.bn}${c.vet ? ' (giờ cũ của phiếu đã gỡ)' : ''}`), () => hisFormSave(true));
+    UI.ticket = id; return;
+  }
+  closeModal(); renderHisRow(id); core.changed();
+}
+function hisAskGo() {
+  const t = hisById(HIS.sel);
+  if (!t) { showConfirm('Chưa chọn phiếu PTTT.', [], null); return; }
+  const r = hisGo(t.id);   // HIS thật gỡ ngay, không hỏi lại
+  if (r.error) { showConfirm(r.error, [], null); return; }
+  renderHisRow(t.id); core.changed();
+}
+
+/* ---------- bộ nối: app điều khiển HIS mô phỏng qua đúng các nút và ô của form, như người dùng ---------- */
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const step = () => sleep(+$('#speed').value || 0);
+function clickRow(id) { if ($('#hisFilter').value) { $('#hisFilter').value = ''; renderHis(); } const tr = $('#hisGrid tr[data-id="' + id + '"]'); if (tr) { tr.click(); if (+$('#speed').value) tr.scrollIntoView({ block: 'nearest' }); } }
+const H = {
+  get tickets() { return HIS.tickets; }, get pats() { return HIS.pats; }, now: () => HIS.now,
+  dateLabel: '17/11/2026', runDate: '2026-11-17', canGo: true, canFill: true, weekDays: ['16/11', '17/11', '18/11', '19/11', '20/11', '21/11', '22/11'], todayIdx: 1,
+  seed: seedStaff, nameOf: id => id === 'oanh' ? 'DS. Oanh' : '',
+  missed: [{ ngay: '15/11/2026', tenBN: 'Người bệnh 09', maBA: 'BA2600108', ten: 'Điều trị bằng sóng ngắn', bs: 'BS. An', cu: false }, { ngay: '16/11/2026', tenBN: 'Người bệnh 21', maBA: 'BA2600120', ten: 'Ngâm thuốc YHCT bộ phận', bs: 'BS. Chi', cu: true }],
+  userHint: 'Bản mô phỏng có sẵn vài tên để thử: Khang, Loan, Nga, Phúc, Quân',
+  userSearch(q) {
+    const f = s => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    return [['BS. Khang', 'Bác sĩ'], ['BS. Loan', 'Bác sĩ'], ['ĐD. Nga', 'Điều dưỡng'], ['KTV. Phúc', 'Kỹ thuật viên'], ['KTV. Quân', 'Kỹ thuật viên']]
+      .filter(x => f(x[0]).indexOf(f(q)) >= 0).map(x => ({ id: f(x[0]).replace(/[^a-z]/g, ''), ten: x[0], user: 'YHCTVP.' + f(x[0]).replace(/[^a-z]/g, '').toUpperCase(), nhom: x[1] }));
+  },
+  async fill(t, r) {
+    let warned = false;
+    clickRow(t.id); $('#btnCapNhat').click(); await step();
+    $('#fStart').value = hm(r.s); $('#fEnd').value = hm(r.e); $('#fPerf').value = r.perf; $('#fMay').value = r.may || '';
+    await step(); $('#fLuu').click(); await step();
+    if (!$('#modal').hidden && !$('#cfBox').hidden) { warned = true; $('#cfYes').click(); await step(); }   // HIS so cả khoảng giờ nên báo trùng; bảng giờ đã được soát theo thời gian thực hiện
+    if (!$('#modal').hidden) { const err = $('#fErr').hidden ? 'không lưu được' : $('#fErr').textContent; $('#fDong').click(); return { ok: false, warned, err }; }
+    return { ok: hisById(t.id).tt === 3, warned };
+  },
+  async go(t) { clickRow(t.id); $('#btnGo').click(); await step(); }
+};
+
+$('#hisGrid').addEventListener('click', e => { const tr = e.target.closest('tr[data-id]'); if (tr) hisSelect(+tr.dataset.id); });
+$('#hisGrid').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { const tr = e.target.closest('tr[data-id]'); if (tr) { e.preventDefault(); hisSelect(+tr.dataset.id); } } });
+$('#hisFilter').addEventListener('change', renderHis);
+$('#btnCapNhat').addEventListener('click', hisOpenForm);
+$('#btnGo').addEventListener('click', hisAskGo);
+$('#fLuu').addEventListener('click', () => hisFormSave(false));
+$('#fDong').addEventListener('click', closeModal);
+$('#cfNo').addEventListener('click', () => { if (UI.ticket != null && UI.pending) { $('#cfBox').hidden = true; $('#formBox').hidden = false; UI.pending = null; } else closeModal(); });
+$('#cfYes').addEventListener('click', () => { const f = UI.pending; UI.pending = null; if (f) f(); else closeModal(); });
+$('#nowInput').addEventListener('change', () => { const v = X.toMin($('#nowInput').value); if (v == null) return; HIS.now = v; core.clock(); });
+$('#btnReset').addEventListener('click', () => { if (!core.App.running) start(true); });
+
+function start(again) {
+  HIS.now = X.toMin($('#nowInput').value) || 725;
+  genData(); core.boot(false);
+  core.D.blocks.push({ id: ++core.D.bkSeq, kind: 'bn', who: 'bn3', s: 480, e: 490, note: 'Chụp X-quang (dòng ví dụ)', auto: false });
+  renderHis(); core.renderAll();
+  core.log((again ? 'Đã tạo lại dữ liệu giả. ' : '') + `Đã tải danh sách ngày 17/11/2026 từ HIS mô phỏng: ${HIS.tickets.length} phiếu, ${Array.from(HIS.pats.values()).filter(p => p.vao != null).length} người bệnh mới vào trong ngày.`);
+}
+core = XepGioCore(H, $);
+let tab0 = 'run'; try { tab0 = localStorage.getItem('xg-tab') || 'run'; } catch (e) {}
+window.__sim = Object.assign({ HIS, H }, core);
+start(false); core.showTab(tab0);
+})();
+</script>

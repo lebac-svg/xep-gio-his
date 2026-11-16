@@ -1,0 +1,18 @@
+{
+  "version": "0.17",
+  "date": "2026-11-17",
+  "files": [
+    {
+      "name": "xepgio-helper.js",
+      "sha256": "a1b1304530e241c619a42827cfab599f7aa32b51457f066feda217235a90de2b"
+    },
+    {
+      "name": "Huong-dan.html",
+      "sha256": "f53b0e801a0c08e7898e25c2be749fd95c403125eda3847c032b5d30b046ec3f"
+    }
+  ],
+  "exe": {
+    "sha256": "69fcf45fccfe29b4b876b5e4021badcb3e3db9be98bd58526945b7b8ed9cdb68"
+  },
+  "page": "https://github.com/lebac-svg/xep-gio-his/releases/latest"
+}
