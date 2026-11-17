@@ -6,7 +6,7 @@ if (window.top !== window) return;                           // chỉ gắn ở 
 if (window.__xepgio) return;                                 // đã gắn rồi thì thôi
 const cfg0 = window.__xepgioCfg || {};
 if (cfg0.host && location.hostname !== cfg0.host) return;    // chỉ chạy trên đúng địa chỉ HIS đã khai
-window.__xepgio = { version: '0.27' };
+window.__xepgio = { version: '0.28' };
 
 const X = (function () {
   const toMin = s => { const m = /(\d{1,2}):(\d{2})/.exec(s || ''); return m ? +m[1] * 60 + +m[2] : null; };
@@ -418,12 +418,15 @@ function XepGioCore(H, $) {
     if (!rows.length) { renderAll(); return; }
     App.running = true; App.stop = false; renderTiles();
     let ok = 0, fail = 0, skip = 0, keep = 0, err = ''; const w0 = App.warn;
+    const took = [];   // số mili giây của từng ca đã điền được, để biết tốc độ có chậm dần không
     let streak = [];   // các ca liên tiếp bị HIS từ chối; đủ 5 thì coi là lỗi chung (mất phiên, HIS treo), dừng và trả các ca đó về như trước
     try { if (H.fillBegin) await H.fillBegin(); } catch (e) { err = e.message || String(e); }
     for (let i = 0; i < rows.length && !err && !App.stop; i++) {
       const r = rows[i], t = byId(r.id);
       const had = t.s != null ? `${hm(t.s)}–${hm(t.e)} ${staffName(t.perf)}${t.may ? ' ' + t.may : ''}` : '';
+      const t0 = Date.now();
       const res = (await H.fill(t, r)) || { ok: false, err: 'không có kết quả' };
+      if (res.ok) took.push(Date.now() - t0);
       if (res.warned) App.warn += res.warned === true ? 1 : res.warned;
       if (res.ok) {
         App.filled.add(r.id); App.move.delete(r.id); r.status = 'fixed'; r.wait = false; ok++; streak = [];
@@ -449,6 +452,10 @@ function XepGioCore(H, $) {
     try { if (H.fillEnd) await H.fillEnd(); } catch (e) {}
     const note = `${App.stop ? 'Đã dừng theo lệnh. ' : ''}Điền ${ok} ca lúc ${now >= 1440 || now < 0 ? '' : hm(now)}${wait ? `, ${wait} ca chưa qua giờ kết thúc nên để lại` : ''}${skip ? `, ${skip} ca bỏ qua` : ''}${keep ? `, ${keep} ca xanh HIS không cho ghi lại nên giữ nguyên` : ''}${fail ? `, ${fail} ca HIS từ chối` : ''}. HIS báo trùng ${App.warn - w0} lần, app đã bấm Đồng ý.${err ? ' Dừng lại vì: ' + err + '.' : ''}`;
     if (ok || fail || skip || keep || err) log(note);
+    if (took.length >= 3 && H.fillNote) {   // chỉ ghi ở bản gắn vào HIS thật
+      const sec = a => (a.reduce((n, x) => n + x, 0) / a.length / 1000).toFixed(1).replace('.', ',');
+      log(`Tốc độ điền: trung bình ${sec(took)} giây mỗi ca` + (took.length >= 20 ? `, 10 ca đầu ${sec(took.slice(0, 10))} giây, 10 ca cuối ${sec(took.slice(-10))} giây` : '') + '.' + (H.fillNote ? ' ' + H.fillNote() : ''));
+    }
     if (err) { App.autoStop = true; if (auto) log('Tự điền tạm dừng vì có lỗi. Xem lý do ở trên rồi bấm Điền vào HIS để chạy lại.'); }
     if (keep) App.replan = true;   // các ca chưa điền sẽ được xếp lại để né ca vừa giữ nguyên, sau khi số liệu được đọc lại từ HIS
     savePlan();
@@ -1094,14 +1101,16 @@ const H = {
   fillWarn: 'App mở form "Cập nhật PTTT" của HIS cho từng ca, điền giờ, người làm, mã máy rồi bấm "Lưu đóng". Cảnh báo trùng của HIS được bấm Đồng ý và ghi vào nhật ký. Ca nào HIS từ chối thì app ghi lý do, bỏ qua ca đó và điền tiếp ca sau; 5 ca liên tiếp bị từ chối thì dừng.',
   loadFilled() { return ((store().days || {})[R.date] || {}).filled || []; },
   onFilled(ids) { try { const st = store(); st.autoOk = true; st.days = st.days || {}; st.days[R.date] = Object.assign({}, st.days[R.date], { filled: ids }); localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) {} },
+  fillNote() { const n = R.swept || 0; return n ? 'Đã dọn ' + n + ' form cũ mà HIS để lại trong bộ nhớ.' : ''; },
   async fillBegin() {   // cho lưới của HIS hiện đủ mọi phiếu của ngày chạy trên một trang, để chọn được dòng cần điền
+    R.swept = 0;
     await query(gridBase(), 'NT.024.3.VS2', { MAUBENHPHAMID: '0', TRANGTHAI_CBOPHIEU: '' }, 1);   // thử một truy vấn nhỏ: phiên đăng nhập hết hạn thì báo ngay, không điền tiếp
     const $j = window.$, g = $j('#grdCK');
     R.keepF = { tu: $j('#txtTUNGAY').val(), den: $j('#txtDENNGAY').val(), tt: $j('#cboTRANGTHAIPHIEU').val(), rowNum: g.jqGrid('getGridParam', 'rowNum') };
     g.jqGrid('setGridParam', { rowNum: 3000 });
     await hisSearch(vn(R.date), vn(R.date), '');
   },
-  async fillEnd() { if (formsOpen()) { closeForm(); await waitFor(() => !formsOpen(), 8000); } if (R.keepF) { const k = R.keepF; R.keepF = null; window.$('#grdCK').jqGrid('setGridParam', { rowNum: k.rowNum }); await hisSearch(k.tu, k.den, k.tt); } },
+  async fillEnd() { if (formsOpen()) { closeForm(); await waitFor(() => !formsOpen(), 8000); } sweepForms(); if (R.keepF) { const k = R.keepF; R.keepF = null; window.$('#grdCK').jqGrid('setGridParam', { rowNum: k.rowNum }); await hisSearch(k.tu, k.den, k.tt); } },
   afterFill(note) { setTimeout(refreshDay, 200); },   // đọc lại từ HIS để số liệu trên app khớp, giữ nguyên bảng giờ các ca chưa điền
   // Mở form "Cập nhật PTTT" của HIS cho một ca. Trả về '' nếu mở được, hoặc lý do không mở được.
   async openForm(t) {
@@ -1110,6 +1119,7 @@ const H = {
     if (!row) return 'không thấy phiếu ' + t.soPhieu + ' trên lưới của HIS';
     closeAlert();
     if (formsOpen()) { closeForm(); await waitFor(() => !formsOpen(), 8000); }   // không để sót form nào đang mở
+    sweepForms();
     markOldForms();                                                      // đánh dấu khung của các lần mở trước, để biết form mới đã nạp
     const findDv = () => { const ids = dg.jqGrid('getDataIDs'); for (let i = 0; i < ids.length; i++) if (String(dg.jqGrid('getRowData', ids[i]).DICHVUKHAMBENHID) === dv) return ids[i]; return null; };
     g.jqGrid('setSelection', row, true);                                 // chọn phiếu, HIS tải dịch vụ của phiếu
@@ -1263,11 +1273,37 @@ const formReady = () => { const d = formDoc(); return !!(d && d.readyState === '
 const markOldForms = () => formFrames().forEach(f => { const d = frameDoc(f); if (d) d.__xgOld = true; });
 const formsOpen = () => formFrames().filter(f => f.getClientRects().length).length;
 const closeForm = () => { formFrames().filter(f => f.getClientRects().length).forEach(f => { const w = f.closest('.jBox-wrapper'), x = w && w.querySelector('.jBox-closeButton'); if (x) x.click(); }); try { if (formsOpen()) window.DlgUtil.close('dlgPTTT'); } catch (e) {} };   // đóng mọi form đang mở, không lưu
+// HIS không hủy khung của form sau khi đóng: điền vài trăm ca thì vài trăm trang form ẩn vẫn nằm trong bộ nhớ và máy chậm dần.
+// Dọn các khung cũ đã ẩn, chừa lại khung mới nhất và mọi khung đang hiện.
+function sweepForms() {
+  let n = 0;
+  try {
+    const all = formFrames(), keep = all[all.length - 1];
+    all.forEach(fr => {
+      if (fr === keep || fr.getClientRects().length) return;
+      const w = fr.closest('.jBox-wrapper');
+      const alone = w && !w.contains(keep) && !Array.from(w.querySelectorAll('iframe')).some(x => x !== fr && x.getClientRects().length);
+      window.$(alone ? w : fr).remove(); n++;
+    });
+  } catch (e) {}
+  R.swept = (R.swept || 0) + n;
+  return n;
+}
+// Bảng giờ và chấm công của các ngày đã cũ không còn dùng: bỏ đi để bộ nhớ của app không phình ra, mỗi lần lưu không bị chậm
+function pruneStore() {
+  try {
+    const st = store(), cut = addDays(iso(new Date()), -21); let n = 0;
+    ['days', 'att'].forEach(k => Object.keys(st[k] || {}).forEach(d => { if (/^\d{4}-\d\d-\d\d$/.test(d) && d < cut) { delete st[k][d]; n++; } }));
+    if (n) localStorage.setItem(KEY, JSON.stringify(st));
+  } catch (e) {}
+}
 const alertIn = doc => { const a = doc.getElementById('alertify'); if (!a || /alertify-(hide|hidden)/.test(a.className)) return null; const cs = doc.defaultView.getComputedStyle(a); return cs.display === 'none' || cs.visibility === 'hidden' ? null : a; };
 const alertEl = () => { const a = document.getElementById('alertify'); if (!a || /alertify-(hide|hidden)/.test(a.className)) return null; const cs = getComputedStyle(a); return cs.display === 'none' || cs.visibility === 'hidden' ? null : a; };
 const alertText = () => { const a = alertEl(); return a ? ((a.querySelector('.alertify-message') || a).textContent || '').trim() : ''; };
 const closeAlert = () => { const b = document.getElementById('alertify-ok'); if (alertEl() && b) b.click(); };
+pruneStore();
 const core = XepGioCore(H, $);
+H.sweepForms = sweepForms;
 
 // Địa chỉ và bộ lọc lấy từ chính lưới phiếu của màn Quản lý phẫu thuật thủ thuật (khoa, phòng thực hiện, mã phiên)
 function gridBase() {

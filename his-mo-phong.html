@@ -821,12 +821,15 @@ function XepGioCore(H, $) {
     if (!rows.length) { renderAll(); return; }
     App.running = true; App.stop = false; renderTiles();
     let ok = 0, fail = 0, skip = 0, keep = 0, err = ''; const w0 = App.warn;
+    const took = [];   // số mili giây của từng ca đã điền được, để biết tốc độ có chậm dần không
     let streak = [];   // các ca liên tiếp bị HIS từ chối; đủ 5 thì coi là lỗi chung (mất phiên, HIS treo), dừng và trả các ca đó về như trước
     try { if (H.fillBegin) await H.fillBegin(); } catch (e) { err = e.message || String(e); }
     for (let i = 0; i < rows.length && !err && !App.stop; i++) {
       const r = rows[i], t = byId(r.id);
       const had = t.s != null ? `${hm(t.s)}–${hm(t.e)} ${staffName(t.perf)}${t.may ? ' ' + t.may : ''}` : '';
+      const t0 = Date.now();
       const res = (await H.fill(t, r)) || { ok: false, err: 'không có kết quả' };
+      if (res.ok) took.push(Date.now() - t0);
       if (res.warned) App.warn += res.warned === true ? 1 : res.warned;
       if (res.ok) {
         App.filled.add(r.id); App.move.delete(r.id); r.status = 'fixed'; r.wait = false; ok++; streak = [];
@@ -852,6 +855,10 @@ function XepGioCore(H, $) {
     try { if (H.fillEnd) await H.fillEnd(); } catch (e) {}
     const note = `${App.stop ? 'Đã dừng theo lệnh. ' : ''}Điền ${ok} ca lúc ${now >= 1440 || now < 0 ? '' : hm(now)}${wait ? `, ${wait} ca chưa qua giờ kết thúc nên để lại` : ''}${skip ? `, ${skip} ca bỏ qua` : ''}${keep ? `, ${keep} ca xanh HIS không cho ghi lại nên giữ nguyên` : ''}${fail ? `, ${fail} ca HIS từ chối` : ''}. HIS báo trùng ${App.warn - w0} lần, app đã bấm Đồng ý.${err ? ' Dừng lại vì: ' + err + '.' : ''}`;
     if (ok || fail || skip || keep || err) log(note);
+    if (took.length >= 3 && H.fillNote) {   // chỉ ghi ở bản gắn vào HIS thật
+      const sec = a => (a.reduce((n, x) => n + x, 0) / a.length / 1000).toFixed(1).replace('.', ',');
+      log(`Tốc độ điền: trung bình ${sec(took)} giây mỗi ca` + (took.length >= 20 ? `, 10 ca đầu ${sec(took.slice(0, 10))} giây, 10 ca cuối ${sec(took.slice(-10))} giây` : '') + '.' + (H.fillNote ? ' ' + H.fillNote() : ''));
+    }
     if (err) { App.autoStop = true; if (auto) log('Tự điền tạm dừng vì có lỗi. Xem lý do ở trên rồi bấm Điền vào HIS để chạy lại.'); }
     if (keep) App.replan = true;   // các ca chưa điền sẽ được xếp lại để né ca vừa giữ nguyên, sau khi số liệu được đọc lại từ HIS
     savePlan();
