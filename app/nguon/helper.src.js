@@ -6,7 +6,7 @@ if (window.top !== window) return;                           // chỉ gắn ở 
 if (window.__xepgio) return;                                 // đã gắn rồi thì thôi
 const cfg0 = window.__xepgioCfg || {};
 if (cfg0.host && location.hostname !== cfg0.host) return;    // chỉ chạy trên đúng địa chỉ HIS đã khai
-window.__xepgio = { version: '0.19' };
+window.__xepgio = { version: '0.20' };
 
 /*@ENGINE*/
 /*@CORE*/
@@ -133,7 +133,7 @@ const H = {
     } catch (e) {}
   },
   /* ----- điền giờ: app mở form "Cập nhật PTTT" của HIS cho từng ca, điền rồi bấm "Lưu đóng", đúng như làm tay ----- */
-  fillWarn: 'App mở form "Cập nhật PTTT" của HIS cho từng ca, điền giờ, người làm, mã máy rồi bấm "Lưu đóng". Cảnh báo trùng của HIS được bấm Đồng ý và ghi vào nhật ký. HIS từ chối ca nào thì app dừng lại.',
+  fillWarn: 'App mở form "Cập nhật PTTT" của HIS cho từng ca, điền giờ, người làm, mã máy rồi bấm "Lưu đóng". Cảnh báo trùng của HIS được bấm Đồng ý và ghi vào nhật ký. Ca nào HIS từ chối thì app ghi lý do, bỏ qua ca đó và điền tiếp ca sau; 5 ca liên tiếp bị từ chối thì dừng.',
   loadFilled() { return ((store().days || {})[R.date] || {}).filled || []; },
   onFilled(ids) { try { const st = store(); st.autoOk = true; st.days = st.days || {}; st.days[R.date] = Object.assign({}, st.days[R.date], { filled: ids }); localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) {} },
   async fillBegin() {   // cho lưới của HIS hiện đủ mọi phiếu của ngày chạy trên một trang, để chọn được dòng cần điền
@@ -248,7 +248,7 @@ const H = {
 
   /* ----- gỡ xanh: app làm đúng các bước bạn làm tay trên màn Quản lý phẫu thuật thủ thuật ----- */
   goKey: t => String(t.ref.MAUBENHPHAMID),
-  goWarn: 'App chọn từng phiếu trên lưới của HIS rồi bấm mục "Gỡ hoàn thành phiếu", đúng như bạn bấm chuột phải. Mọi phiếu đang xanh của ngày đều bị gỡ (trừ sắc thuốc), kể cả phiếu đã cập nhật đúng, nên chỉ dùng trước khi cập nhật thủ thuật của ngày đó. Phiếu đã gỡ vẫn giữ giờ và người làm cũ.',
+  goWarn: 'App chọn từng phiếu trên lưới của HIS rồi bấm mục "Gỡ hoàn thành phiếu", đúng như bạn bấm chuột phải. Mọi phiếu đang xanh của ngày đều bị gỡ (trừ sắc thuốc), kể cả phiếu người khác đã cập nhật đúng, nên chỉ dùng trước khi cập nhật thủ thuật của ngày đó hoặc khi muốn chạy lại cả ngày. Phiếu đã gỡ vẫn giữ giờ và người làm cũ.',
   async goBegin() {   // nhớ bộ lọc đang đặt trên HIS, rồi lọc danh sách về đúng ngày chạy và trạng thái Đã hoàn thành
     gridBase();
     if (!document.getElementById('GoHoanThanhPhieu')) throw new Error('không thấy mục Gỡ hoàn thành phiếu trong menu của HIS');

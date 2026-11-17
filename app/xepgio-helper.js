@@ -6,7 +6,7 @@ if (window.top !== window) return;                           // chỉ gắn ở 
 if (window.__xepgio) return;                                 // đã gắn rồi thì thôi
 const cfg0 = window.__xepgioCfg || {};
 if (cfg0.host && location.hostname !== cfg0.host) return;    // chỉ chạy trên đúng địa chỉ HIS đã khai
-window.__xepgio = { version: '0.19' };
+window.__xepgio = { version: '0.20' };
 
 const X = (function () {
   const toMin = s => { const m = /(\d{1,2}):(\d{2})/.exec(s || ''); return m ? +m[1] * 60 + +m[2] : null; };
@@ -338,6 +338,7 @@ function XepGioCore(H, $) {
     if (!rows.length) { renderAll(); return; }
     App.running = true; App.stop = false; renderTiles();
     let ok = 0, fail = 0, skip = 0, keep = 0, err = ''; const w0 = App.warn;
+    let streak = [];   // các ca liên tiếp bị HIS từ chối; đủ 5 thì coi là lỗi chung (mất phiên, HIS treo), dừng và trả các ca đó về như trước
     try { if (H.fillBegin) await H.fillBegin(); } catch (e) { err = e.message || String(e); }
     for (let i = 0; i < rows.length && !err && !App.stop; i++) {
       const r = rows[i], t = byId(r.id);
@@ -345,22 +346,30 @@ function XepGioCore(H, $) {
       const res = (await H.fill(t, r)) || { ok: false, err: 'không có kết quả' };
       if (res.warned) App.warn += res.warned === true ? 1 : res.warned;
       if (res.ok) {
-        App.filled.add(r.id); App.move.delete(r.id); r.status = 'fixed'; r.wait = false; ok++;
+        App.filled.add(r.id); App.move.delete(r.id); r.status = 'fixed'; r.wait = false; ok++; streak = [];
         if (H.onFilled) H.onFilled(Array.from(App.filled)); savePlan();
         if (had) log(`${t.tenBN} · ${t.ten}: ghi đè ${had} thành ${hm(r.s)}–${hm(r.e)} ${staffName(r.perf)}${r.may ? ' ' + r.may : ''}`);
       } else if (res.skip) { skip++; log(`${hm(r.s)} ${t.tenBN} · ${t.ten}: bỏ qua, ${res.err}`); }
       else if (t.tt === 3) {   // ca đã xanh mà HIS không cho ghi lại (ví dụ người bệnh đã ra viện): giữ nguyên như trên HIS, không thử lại, chạy tiếp
-        keep++; App.move.delete(r.id); App.lock.add(r.id);
+        keep++; App.move.delete(r.id); App.lock.add(r.id); streak.push({ id: r.id, row: Object.assign({}, r), green: true });
         App.plan.set(r.id, { id: r.id, s: t.s, e: t.e, may: t.may, perf: t.perf, status: 'fixed', note: '', wait: false });
         log(`${hm(t.s)} ${t.tenBN} · ${t.ten}: HIS không cho ghi lại (${res.err || 'không lưu được'}), giữ nguyên như trên HIS`);
       }
-      else { fail++; log(`${hm(r.s)} ${t.tenBN} · ${t.ten}: HIS từ chối, ${res.err || 'không lưu được'}`); if (H.strict) err = 'HIS từ chối một ca nên app dừng để bạn xem'; }
+      else {   // ca vàng HIS từ chối: ghi lý do vào bảng giờ, không thử lại cho tới lần xếp giờ sau, chạy tiếp
+        fail++; streak.push({ id: r.id, row: Object.assign({}, r), green: false });
+        r.status = 'stuck'; r.note = 'HIS từ chối: ' + (res.err || 'không lưu được'); r.wait = false;
+        log(`${hm(r.s)} ${t.tenBN} · ${t.ten}: HIS từ chối, ${res.err || 'không lưu được'}. Bỏ qua ca này.`);
+      }
+      if (streak.length >= 5) {
+        streak.forEach(x => { App.plan.set(x.id, x.row); if (x.green) { App.lock.delete(x.id); App.move.add(x.id); keep--; } else fail--; });
+        streak = []; err = '5 ca liên tiếp bị HIS từ chối, có thể do phiên đăng nhập hoặc HIS đang lỗi. Các ca đó được giữ lại để điền sau';
+      }
       if (i % 12 === 0) { renderTiles(); await sleep(0); }
     }
     try { if (H.fillEnd) await H.fillEnd(); } catch (e) {}
     const note = `${App.stop ? 'Đã dừng theo lệnh. ' : ''}Điền ${ok} ca lúc ${now >= 1440 || now < 0 ? '' : hm(now)}${wait ? `, ${wait} ca chưa qua giờ kết thúc nên để lại` : ''}${skip ? `, ${skip} ca bỏ qua` : ''}${keep ? `, ${keep} ca xanh HIS không cho ghi lại nên giữ nguyên` : ''}${fail ? `, ${fail} ca HIS từ chối` : ''}. HIS báo trùng ${App.warn - w0} lần, app đã bấm Đồng ý.${err ? ' Dừng lại vì: ' + err + '.' : ''}`;
     if (ok || fail || skip || keep || err) log(note);
-    if (err || fail) { App.autoStop = true; if (auto) log('Tự điền tạm dừng vì có lỗi. Xem lý do ở trên rồi bấm Điền vào HIS để chạy lại.'); }
+    if (err) { App.autoStop = true; if (auto) log('Tự điền tạm dừng vì có lỗi. Xem lý do ở trên rồi bấm Điền vào HIS để chạy lại.'); }
     if (keep) App.replan = true;   // các ca chưa điền sẽ được xếp lại để né ca vừa giữ nguyên, sau khi số liệu được đọc lại từ HIS
     savePlan();
     App.running = false;
@@ -369,20 +378,32 @@ function XepGioCore(H, $) {
     if (reread) H.afterFill(note);
   }
   // Các phiếu sẽ bị gỡ: đang xanh, không phải sắc thuốc (HIS tự cập nhật), không phải ca app vừa điền. Mỗi phiếu chỉ tính một lần.
-  function goList() { const seen = new Set(); return H.tickets.filter(t => { if (t.tt !== 3 || t.auto || App.filled.has(t.id) || (groupOf(t.ten) || {}).skip) return false; const k = H.goKey ? H.goKey(t) : t.id; if (seen.has(k)) return false; seen.add(k); return true; }); }
-  async function runGoAll(limit) {
+  // all = true: gỡ cả phiếu app đã điền, để chạy lại cả ngày. Phiếu của người bệnh đã ra viện luôn được để nguyên.
+  const goKeyOf = t => H.goKey ? H.goKey(t) : t.id;
+  function goList(all, out) { const seen = new Set(); return H.tickets.filter(t => { if (t.tt !== 3 || t.auto || (!all && App.filled.has(t.id)) || (groupOf(t.ten) || {}).skip || !!out !== outBn(t.bn)) return false; const k = goKeyOf(t); if (seen.has(k)) return false; seen.add(k); return true; }); }
+  async function runGoAll(limit, all) {
     if (App.running || !H.canGo) return;
-    const list = goList().slice(0, limit || 1e9);
+    const list = goList(all).slice(0, limit || 1e9);
     App.goAsk = false; App.running = true; App.stop = false; renderTiles();
-    let ok = 0, err = '';
+    let ok = 0, fail = 0, streak = 0, err = ''; const why = {};
     try { if (H.goBegin) await H.goBegin(); } catch (e) { err = e.message || String(e); }
-    for (let i = 0; i < list.length && !err && !App.stop; i++) {   // gặp phiếu HIS không cho gỡ thì dừng ngay, không gỡ tiếp
-      const r = (await H.go(list[i])) || { ok: true };
-      if (r.ok) ok++; else err = r.err || 'HIS không gỡ được';
+    for (let i = 0; i < list.length && !err && !App.stop; i++) {   // phiếu HIS không cho gỡ thì bỏ qua, gỡ tiếp phiếu sau; 5 phiếu liên tiếp không gỡ được thì dừng
+      const t = list[i], k = goKeyOf(t), r = (await H.go(t)) || { ok: true };
+      if (r.ok) {
+        ok++; streak = 0; let was = false;
+        H.tickets.forEach(x => { if (goKeyOf(x) !== k) return; if (App.filled.delete(x.id)) was = true; App.move.delete(x.id); App.lock.delete(x.id); App.plan.delete(x.id); });
+        if (was && H.onFilled) H.onFilled(Array.from(App.filled));
+      } else {
+        fail++; streak++; const m = r.err || 'HIS không gỡ được'; why[m] = (why[m] || 0) + 1;
+        if (fail <= 5) log(`${t.tenBN} · phiếu ${t.soPhieu || ''}: không gỡ được, ${m}. Để nguyên phiếu này.`);
+        if (streak >= 5) err = '5 phiếu liên tiếp không gỡ được';
+      }
       if (i % 12 === 0) { renderTiles(); await sleep(0); }
     }
     try { if (H.goEnd) await H.goEnd(); } catch (e) {}
-    const note = `Đã gỡ xanh ${ok} trên ${list.length} phiếu${App.stop ? ' rồi dừng theo lệnh' : ''}${err ? '. Dừng lại vì: ' + err : ''}. Phiếu đã gỡ vẫn giữ giờ cũ trên HIS cho đến khi được điền lại.`;
+    savePlan();
+    const reasons = Object.keys(why).map(m => why[m] + ' phiếu: ' + m).join('; ');
+    const note = `Đã gỡ xanh ${ok} trên ${list.length} phiếu${fail ? `, ${fail} phiếu HIS không cho gỡ nên để nguyên (${reasons})` : ''}${App.stop ? ', rồi dừng theo lệnh' : ''}${err ? '. Dừng lại vì: ' + err : ''}. Phiếu đã gỡ vẫn giữ giờ cũ trên HIS cho đến khi được điền lại.`;
     log(note);
     App.running = false; App.conflicts = null; renderAll();
     if (H.afterGo) H.afterGo(note);
@@ -441,16 +462,17 @@ function XepGioCore(H, $) {
     const tiles = [['Phiếu vàng chưa xếp', chua, ''], [H.canGo ? 'Phiếu xanh do sao phiếu' : 'Ca đã xanh trên HIS', sao, sao && H.canGo ? 'bad' : ''], ['Dự kiến, chờ điền', planned, ''], ['Ca kẹt cần gỡ', stuck, stuck ? 'bad' : ''],
       ['Đã điền vào HIS', App.filled.size, App.filled.size ? 'good' : ''], ['Lỗi và cảnh báo trùng', errs == null ? '—' : errs, errs ? 'bad' : errs === 0 ? 'good' : '']];
     $('#tiles').innerHTML = tiles.map(t => `<div class="tile ${t[2]}"><b>${t[1]}</b><span>${t[0]}</span></div>`).join('');
-    $('#goInfo').textContent = !H.canGo ? `Có ${sao} ca đang xanh trên HIS. Bản này chưa gỡ xanh.` : sao ? `Có ${sao} phiếu đang xanh từ trước lượt chạy này. Gỡ xanh để biết đúng những thủ thuật cần chạy.` : 'Không còn phiếu xanh do sao phiếu.';
+    const glAll = goList(true).length;
+    $('#goInfo').textContent = !H.canGo ? `Có ${sao} ca đang xanh trên HIS. Bản này chưa gỡ xanh.` : sao ? `Có ${sao} ca đang xanh từ trước lượt chạy này. Gỡ xanh để biết đúng những thủ thuật cần chạy.` : glAll ? 'Không còn phiếu xanh do sao phiếu. Muốn chạy lại cả ngày thì bấm Gỡ xanh để gỡ cả các phiếu app đã điền.' : 'Không còn phiếu xanh do sao phiếu.';
     const on = S.staff.map(st => D.on[st.id]), n = k => on.filter(k).length;
     $('#ccInfo').textContent = `Chấm công: ${n(o => o[0] && o[1])} người cả ngày, ${n(o => o[0] && !o[1])} sáng, ${n(o => !o[0] && o[1])} chiều, ${n(o => !o[0] && !o[1])} nghỉ.`;
-    $('#btnGoAll').disabled = App.running || !sao || !H.canGo;
+    $('#btnGoAll').disabled = App.running || !glAll || !H.canGo;
     $('#btnPlan').disabled = App.running || !H.tickets.length; $('#btnFill').disabled = App.running || !planned || !H.canFill; $('#btnStop').disabled = !App.running;
     ['#btnCheck', '#btnFix', '#btnCheck2', '#btnFix2', '#btnRunSel'].forEach(s => { $(s).disabled = App.running || !H.tickets.length; });
     $('#btnRunSel').textContent = H.canFill ? 'Chạy riêng cho người đã tích' : 'Xếp riêng cho người đã tích';
     $('#dirtyNote').hidden = !App.dirty; $('#roNote').hidden = !!H.canFill || !!H.canGo; $('#roNote').textContent = H.canGo ? 'Bản này gỡ xanh được nhưng chưa điền vào HIS: bảng giờ xếp xong mới nằm trên app.' : 'Bản này chỉ đọc số liệu từ HIS: xếp giờ và soát trùng được, chưa gỡ xanh và chưa điền vào HIS.';
-    const ask = $('#goAsk'), gl = goList().length; ask.hidden = !App.goAsk || App.running || !gl;
-    if (!ask.hidden) ask.innerHTML = `<b>Gỡ hoàn thành ${gl} phiếu đang xanh của ngày ${esc(H.dateLabel)}?</b><br>${esc(H.goWarn || 'Phiếu đã gỡ về vàng nhưng vẫn giữ giờ và người làm cũ cho đến khi được điền lại. Sắc thuốc không bị gỡ.')}<div class="row" style="margin-top:8px"><button type="button" data-go="1">Gỡ thử 1 phiếu</button><button type="button" class="primary" data-go="all">Gỡ cả ${gl} phiếu</button><button type="button" data-go="no">Thôi</button></div>`;
+    const ask = $('#goAsk'), gl = goList(false).length, raN = goList(true, true).length; ask.hidden = !App.goAsk || App.running || !glAll;
+    if (!ask.hidden) ask.innerHTML = `<b>Gỡ hoàn thành phiếu đang xanh của ngày ${esc(H.dateLabel)}?</b><br>${esc(H.goWarn || 'Phiếu đã gỡ về vàng nhưng vẫn giữ giờ và người làm cũ cho đến khi được điền lại. Sắc thuốc không bị gỡ.')} Phiếu nào HIS không cho gỡ thì app để nguyên và gỡ tiếp phiếu sau.${raN ? ` ${raN} phiếu của người bệnh đã ra viện được để nguyên.` : ''}<div class="row" style="margin-top:8px">${gl ? `<button type="button" data-go="1">Gỡ thử 1 phiếu</button><button type="button" class="primary" data-go="all">Gỡ ${gl} phiếu app chưa điền</button>` : ''}${glAll > gl ? `<button type="button"${gl ? '' : ' class="primary"'} data-go="re">Chạy lại cả ngày: gỡ cả ${glAll} phiếu, gồm ${glAll - gl} phiếu app đã điền</button>` : ''}<button type="button" data-go="no">Thôi</button></div>`;
     $('#ccTitle').textContent = 'Chấm công ngày ' + H.dateLabel;
     const c = $('#cntTrung'); c.hidden = !errs; c.textContent = errs || '';
     renderFillAsk();
@@ -707,7 +729,7 @@ function XepGioCore(H, $) {
   const tid = v => { const t = H.tickets.find(x => String(x.id) === String(v)); return t ? t.id : v; };
   $('#tabs').addEventListener('click', e => { const b = e.target.closest('button[data-tab]'); if (b) showTab(b.dataset.tab); });
   $('#btnGoAll').addEventListener('click', () => { App.goAsk = true; renderTiles(); });   // luôn hỏi lại trước khi ghi vào HIS
-  $('#goAsk').addEventListener('click', e => { const v = e.target.dataset.go; if (!v) return; if (v === 'no') { App.goAsk = false; renderTiles(); } else runGoAll(v === '1' ? 1 : 0); });
+  $('#goAsk').addEventListener('click', e => { const v = e.target.dataset.go; if (!v) return; if (v === 'no') { App.goAsk = false; renderTiles(); } else runGoAll(v === '1' ? 1 : 0, v === 're'); });
   $('#btnPlan').addEventListener('click', () => {
     buildPlan(null);
     const fx = fixGreen();
@@ -922,7 +944,7 @@ const H = {
     } catch (e) {}
   },
   /* ----- điền giờ: app mở form "Cập nhật PTTT" của HIS cho từng ca, điền rồi bấm "Lưu đóng", đúng như làm tay ----- */
-  fillWarn: 'App mở form "Cập nhật PTTT" của HIS cho từng ca, điền giờ, người làm, mã máy rồi bấm "Lưu đóng". Cảnh báo trùng của HIS được bấm Đồng ý và ghi vào nhật ký. HIS từ chối ca nào thì app dừng lại.',
+  fillWarn: 'App mở form "Cập nhật PTTT" của HIS cho từng ca, điền giờ, người làm, mã máy rồi bấm "Lưu đóng". Cảnh báo trùng của HIS được bấm Đồng ý và ghi vào nhật ký. Ca nào HIS từ chối thì app ghi lý do, bỏ qua ca đó và điền tiếp ca sau; 5 ca liên tiếp bị từ chối thì dừng.',
   loadFilled() { return ((store().days || {})[R.date] || {}).filled || []; },
   onFilled(ids) { try { const st = store(); st.autoOk = true; st.days = st.days || {}; st.days[R.date] = Object.assign({}, st.days[R.date], { filled: ids }); localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) {} },
   async fillBegin() {   // cho lưới của HIS hiện đủ mọi phiếu của ngày chạy trên một trang, để chọn được dòng cần điền
@@ -1037,7 +1059,7 @@ const H = {
 
   /* ----- gỡ xanh: app làm đúng các bước bạn làm tay trên màn Quản lý phẫu thuật thủ thuật ----- */
   goKey: t => String(t.ref.MAUBENHPHAMID),
-  goWarn: 'App chọn từng phiếu trên lưới của HIS rồi bấm mục "Gỡ hoàn thành phiếu", đúng như bạn bấm chuột phải. Mọi phiếu đang xanh của ngày đều bị gỡ (trừ sắc thuốc), kể cả phiếu đã cập nhật đúng, nên chỉ dùng trước khi cập nhật thủ thuật của ngày đó. Phiếu đã gỡ vẫn giữ giờ và người làm cũ.',
+  goWarn: 'App chọn từng phiếu trên lưới của HIS rồi bấm mục "Gỡ hoàn thành phiếu", đúng như bạn bấm chuột phải. Mọi phiếu đang xanh của ngày đều bị gỡ (trừ sắc thuốc), kể cả phiếu người khác đã cập nhật đúng, nên chỉ dùng trước khi cập nhật thủ thuật của ngày đó hoặc khi muốn chạy lại cả ngày. Phiếu đã gỡ vẫn giữ giờ và người làm cũ.',
   async goBegin() {   // nhớ bộ lọc đang đặt trên HIS, rồi lọc danh sách về đúng ngày chạy và trạng thái Đã hoàn thành
     gridBase();
     if (!document.getElementById('GoHoanThanhPhieu')) throw new Error('không thấy mục Gỡ hoàn thành phiếu trong menu của HIS');
