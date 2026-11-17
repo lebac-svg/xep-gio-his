@@ -66,6 +66,13 @@ const X = (function () {
     });
     tasks.forEach(t => {
       if (t.fixed) return;
+      if (t.keepAt) {   // ca đang có giờ trên HIS được thả ra để lấy chỗ: giờ cũ còn trống thì giữ nguyên
+        const k = t.keepAt, be = Math.min(k.e, k.s + (t.busy || k.e - k.s));
+        if (!(k.perf && bk.clash('P:' + k.perf, k.s, be, cfg.gapPerf)) && !bk.clash('B:' + t.bn, k.s, k.e, cfg.gapBn) && !(k.may && bk.clash('M:' + k.may, k.s, k.e, cfg.gapMay))) {
+          put(t, k.perf, k.s, k.e, be, k.may);
+          out.set(t.id, { s: k.s, e: k.e, may: k.may || null, perf: k.perf || null, status: 'planned', note: '', kept: true }); return;
+        }
+      }
       if (!(t.dur > 0)) { out.set(t.id, { status: 'stuck', note: 'Chưa có quy tắc thời gian cho thủ thuật này' }); return; }
       let found = [];
       cands(t, staff).forEach(st => { const r = earliest(t, st, cfg, bk); if (r) found.push({ st, s: r.s, may: r.may, shift: r.shift }); });
@@ -86,12 +93,13 @@ const X = (function () {
   function prepare(tasks, cfg) {
     const by = new Map();
     tasks.forEach(t => { if (!by.has(t.bn)) by.set(t.bn, []); by.get(t.bn).push(t); });
-    const groups = [];
+    const groups = [], keeps = [];
     by.forEach(list => {
-      const todo = list.filter(t => !t.fixed).map(t => Object.assign({}, t)).sort((a, b) => (a.order || 0) - (b.order || 0) || a.id - b.id);
+      const todo = list.filter(t => !t.fixed && !t.keepAt).map(t => Object.assign({}, t)).sort((a, b) => (a.order || 0) - (b.order || 0) || a.id - b.id);
+      list.forEach(t => { if (!t.fixed && t.keepAt) keeps.push(Object.assign({}, t)); });
       if (cfg.spread && cfg.shifts.length === 2 && list.length >= 2) {
         const mid = cfg.shifts[0][1];
-        const amFixed = list.filter(t => t.fixed && t.fixed.s < mid).length;
+        const amFixed = list.filter(t => (t.fixed || t.keepAt) && (t.fixed || t.keepAt).s < mid).length;
         const needAm = Math.max(0, Math.min(todo.length, Math.round(list.length * 0.56) - amFixed)), needPm = todo.length - needAm;
         // Người bệnh thứ chẵn làm các ca đầu buổi sáng, thứ lẻ làm các ca đầu buổi chiều, để từng người làm cũng có ca ở cả hai buổi.
         const flip = by.size > 1 && groups.length % 2 === 1;
@@ -102,7 +110,7 @@ const X = (function () {
     groups.sort((x, y) => (x[0].order || 0) - (y[0].order || 0));
     const out = []; let more = true;
     for (let i = 0; more; i++) { more = false; groups.forEach(g => { if (g[i]) { out.push(g[i]); more = true; } }); }
-    return out;
+    return keeps.concat(out);   // ca giữ giờ cũ đi trước; ở lượt sau, ca kẹt được đưa lên trước cả chúng
   }
 
   // Xếp nhiều lượt: ca bị kẹt ở lượt trước được xếp trước ở lượt sau. Giữ lượt ít ca kẹt nhất.
