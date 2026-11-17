@@ -20,7 +20,8 @@ const X = (function () {
   function earliest(t, st, cfg, bk, relax) {
     relax = relax || {};
     const idx = cfg.shifts.map((_, i) => i);
-    if (cfg.spread && t.pref != null) idx.sort((a, b) => (a === t.pref ? 0 : 1) - (b === t.pref ? 0 : 1) || a - b);
+    const want = t.hold != null ? t.hold : cfg.spread ? t.pref : null;   // hold: buổi mà ca đã làm, ưu tiên hơn gợi ý chia buổi
+    if (want != null) idx.sort((a, b) => (a === want ? 0 : 1) - (b === want ? 0 : 1) || a - b);
     for (const i of idx) {
       if (!st.on[i]) continue;
       const a = cfg.shifts[i][0], b = cfg.shifts[i][1];
@@ -69,7 +70,8 @@ const X = (function () {
       let found = [];
       cands(t, staff).forEach(st => { const r = earliest(t, st, cfg, bk); if (r) found.push({ st, s: r.s, may: r.may, shift: r.shift }); });
       if (!found.length) { out.set(t.id, { status: 'stuck', note: explain(t, staff, cfg, bk) }); return; }
-      if (cfg.spread && t.pref != null && found.some(f => f.shift === t.pref)) found = found.filter(f => f.shift === t.pref);
+      const want = t.hold != null ? t.hold : cfg.spread ? t.pref : null;   // hold: ca đã làm ở buổi nào thì ưu tiên xếp lại trong buổi đó
+      if (want != null && found.some(f => f.shift === want)) found = found.filter(f => f.shift === want);
       const best = Math.min.apply(null, found.map(f => f.s));
       const ok = found.filter(f => f.s <= best + cfg.tol);   // người ưu tiên hơn được chọn nếu chỉ chậm hơn tối đa tol phút
       ok.sort((x, y) => rank(x.st, t.gk) - rank(y.st, t.gk) || (load[x.st.id] || 0) - (load[y.st.id] || 0) || x.s - y.s);
@@ -137,6 +139,7 @@ const X = (function () {
       const st = byId.get(r.perf);
       if (st) { if (!st.can[r.gk]) add('cert', 'err', [r.id]); if (si >= 0 && !st.on[si]) add('absent', 'err', [r.id]); }
       if (r.needMay && !r.may) add('nomay', 'err', [r.id]);
+      if (r.need && r.e - r.s < r.need) add('dur', 'err', [r.id], 'làm ' + (r.e - r.s) + ' phút, quy định ' + r.need + ' phút');
       (blocks || []).forEach(b => {
         if (b.kind === 'perf' && b.who === r.perf && r.s < b.e && b.s < Math.min(r.e, r.s + r.busy)) add('pblock', 'err', [r.id], b.note);
         if (b.kind === 'bn' && b.who === r.bn && r.s < b.e && b.s < r.e) add('bblock', 'err', [r.id], b.note);

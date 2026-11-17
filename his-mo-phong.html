@@ -167,7 +167,7 @@ summary { cursor: pointer; color: var(--accent); font-weight: 500; }
       <div class="note" id="roNote" hidden>Bản này chỉ đọc số liệu từ HIS: xếp giờ và soát trùng được, chưa gỡ xanh và chưa điền vào HIS.</div>
       <div class="steps">
         <div class="step"><span class="n">Bước 1</span><h3>Gỡ xanh phiếu sao</h3><p class="muted" id="goInfo"></p><div class="row"><button id="btnGoAll" type="button">Gỡ xanh</button></div></div>
-        <div class="step"><span class="n">Bước 2</span><h3>Xếp giờ cả khoa</h3><p class="muted">App tính giờ làm, người làm và máy cho mọi phiếu vàng của ngày. Kết quả hiện ở Bảng giờ để duyệt bên dưới, chưa ghi gì vào HIS.</p><p class="muted" id="ccInfo"></p><div class="row"><button id="btnPlan" type="button" class="primary">Xếp giờ</button></div>
+        <div class="step"><span class="n">Bước 2</span><h3>Xếp giờ cả khoa</h3><p class="muted">App tính giờ làm, người làm và máy cho mọi phiếu vàng của ngày. Ca đã xanh mà có lỗi (trùng, sai buổi làm, thiếu thời gian so với quy định) cũng được xếp giờ mới; ca xanh không lỗi giữ nguyên. Kết quả hiện ở Bảng giờ để duyệt bên dưới, chưa ghi gì vào HIS.</p><p class="muted" id="ccInfo"></p><div class="row"><button id="btnPlan" type="button" class="primary">Xếp giờ</button></div>
           <details><summary>Cách app xếp giờ</summary><ul class="how">
             <li>Ca đã xanh trên HIS được giữ nguyên giờ.</li>
             <li>Mỗi phiếu vàng được đặt vào giờ sớm nhất mà người bệnh, người làm và máy đều trống, sau giờ chỉ định 5 phút và trong giờ làm việc.</li>
@@ -378,7 +378,8 @@ const X = (function () {
   function earliest(t, st, cfg, bk, relax) {
     relax = relax || {};
     const idx = cfg.shifts.map((_, i) => i);
-    if (cfg.spread && t.pref != null) idx.sort((a, b) => (a === t.pref ? 0 : 1) - (b === t.pref ? 0 : 1) || a - b);
+    const want = t.hold != null ? t.hold : cfg.spread ? t.pref : null;   // hold: buổi mà ca đã làm, ưu tiên hơn gợi ý chia buổi
+    if (want != null) idx.sort((a, b) => (a === want ? 0 : 1) - (b === want ? 0 : 1) || a - b);
     for (const i of idx) {
       if (!st.on[i]) continue;
       const a = cfg.shifts[i][0], b = cfg.shifts[i][1];
@@ -427,7 +428,8 @@ const X = (function () {
       let found = [];
       cands(t, staff).forEach(st => { const r = earliest(t, st, cfg, bk); if (r) found.push({ st, s: r.s, may: r.may, shift: r.shift }); });
       if (!found.length) { out.set(t.id, { status: 'stuck', note: explain(t, staff, cfg, bk) }); return; }
-      if (cfg.spread && t.pref != null && found.some(f => f.shift === t.pref)) found = found.filter(f => f.shift === t.pref);
+      const want = t.hold != null ? t.hold : cfg.spread ? t.pref : null;   // hold: ca đã làm ở buổi nào thì ưu tiên xếp lại trong buổi đó
+      if (want != null && found.some(f => f.shift === want)) found = found.filter(f => f.shift === want);
       const best = Math.min.apply(null, found.map(f => f.s));
       const ok = found.filter(f => f.s <= best + cfg.tol);   // người ưu tiên hơn được chọn nếu chỉ chậm hơn tối đa tol phút
       ok.sort((x, y) => rank(x.st, t.gk) - rank(y.st, t.gk) || (load[x.st.id] || 0) - (load[y.st.id] || 0) || x.s - y.s);
@@ -495,6 +497,7 @@ const X = (function () {
       const st = byId.get(r.perf);
       if (st) { if (!st.can[r.gk]) add('cert', 'err', [r.id]); if (si >= 0 && !st.on[si]) add('absent', 'err', [r.id]); }
       if (r.needMay && !r.may) add('nomay', 'err', [r.id]);
+      if (r.need && r.e - r.s < r.need) add('dur', 'err', [r.id], 'làm ' + (r.e - r.s) + ' phút, quy định ' + r.need + ' phút');
       (blocks || []).forEach(b => {
         if (b.kind === 'perf' && b.who === r.perf && r.s < b.e && b.s < Math.min(r.e, r.s + r.busy)) add('pblock', 'err', [r.id], b.note);
         if (b.kind === 'bn' && b.who === r.bn && r.s < b.e && b.s < r.e) add('bblock', 'err', [r.id], b.note);
@@ -565,10 +568,12 @@ function XepGioCore(H, $) {
   function dirty() { if (App.plan.size) App.dirty = true; App.conflicts = null; persist(); renderAll(); }
 
   // Bảng giờ được lưu theo ngày, để đóng cửa sổ rồi mở lại vẫn điền tiếp được đúng bảng cũ
-  const savePlan = () => { if (H.savePlan) H.savePlan({ plan: Array.from(App.plan.values()).filter(r => r.status !== 'fixed'), manual: Array.from(App.manual), skip: Array.from(App.skip) }); };
+  const savePlan = () => { if (H.savePlan) H.savePlan({ plan: Array.from(App.plan.values()).filter(r => r.status !== 'fixed'), manual: Array.from(App.manual), skip: Array.from(App.skip), move: Array.from(App.move) }); };
   function restorePlan() {
     const sp = H.loadPlan ? H.loadPlan() : null; if (!sp) return;
-    (sp.plan || []).forEach(r => { const t = byId(r.id); if (!t || (r.status === 'planned' && t.tt === 3)) return; App.plan.set(r.id, Object.assign({}, r, { wait: false })); });
+    const mv = new Set((sp.move || []).filter(id => { const t = byId(id); return t && t.tt === 3; }));   // ca xanh có lỗi đã được xếp giờ mới, chờ ghi đè
+    (sp.plan || []).forEach(r => { const t = byId(r.id); if (!t || (r.status === 'planned' && t.tt === 3 && !mv.has(r.id))) return; App.plan.set(r.id, Object.assign({}, r, { wait: false })); });
+    App.move = new Set(Array.from(mv).filter(id => App.plan.has(id) && App.plan.get(id).status === 'planned'));
     App.manual = new Map((sp.manual || []).filter(x => byId(x[0]))); App.skip = new Set((sp.skip || []).filter(id => byId(id)));
     const n = Array.from(App.plan.values()).filter(r => r.status === 'planned').length;
     if (n) log('Đã lấy lại bảng giờ xếp từ trước: ' + n + ' ca dự kiến chưa điền.');
@@ -587,7 +592,8 @@ function XepGioCore(H, $) {
       const g = groupOf(t.ten), old = App.plan.get(t.id);
       const b = { id: t.id, bn: t.bn, gk: g ? g.k : '?', dur: g ? g.dur : 0, busy: g ? g.busy : 0, machines: g ? machinesOf(g) : null, order: t.cd, pinPerf: App.manual.get(t.id) || null };
       if (t.tt === 3 && !App.move.has(t.id)) { b.fixed = { s: t.s, e: t.e, may: t.may, perf: t.perf }; b.dur = t.e - t.s; b.busy = Math.min(b.busy || b.dur, b.dur); b.keep = 'his'; }
-      else if (scope && !scope.has(t.bn)) { if (old && old.status === 'planned') { b.fixed = { s: old.s, e: old.e, may: old.may, perf: old.perf }; b.keep = 'plan'; } else return; }
+      else if (t.tt === 3 && t.s != null && (!scope || scope.has(t.bn))) { const si = S.shifts.findIndex(sh => t.s >= sh[0] && t.s < sh[1]); if (si >= 0) b.hold = si; }   // ca xanh có lỗi: xếp lại trong đúng buổi đã làm nếu còn chỗ
+      if (b.fixed) {} else if (scope && !scope.has(t.bn)) { if (old && old.status === 'planned') { b.fixed = { s: old.s, e: old.e, may: old.may, perf: old.perf }; b.keep = 'plan'; } else return; }
       tasks.push(b);
     });
     const res = X.plan(tasks, staffEng(), cfg(), blocksEng());
@@ -603,7 +609,7 @@ function XepGioCore(H, $) {
       const g = groupOf(t.ten), p = App.plan.get(t.id);
       const v = p && p.status === 'planned' ? p : t.tt === 3 ? t : null;
       if (!v || v.s == null) return null;
-      return { id: t.id, t, g, src: v === t ? 'his' : 'plan', s: v.s, e: v.e, perf: v.perf, may: v.may, bn: t.bn, gk: g ? g.k : '?', busy: g ? Math.min(g.busy, v.e - v.s) : v.e - v.s, order: t.cd, needMay: !!(g && mayList(g)) };
+      return { id: t.id, t, g, src: v === t ? 'his' : 'plan', s: v.s, e: v.e, perf: v.perf, may: v.may, bn: t.bn, gk: g ? g.k : '?', busy: g ? Math.min(g.busy, v.e - v.s) : v.e - v.s, order: t.cd, needMay: !!(g && mayList(g)), need: g ? g.dur : 0 };
     }).filter(Boolean);
   }
   const gLabel = r => r.g ? r.g.label : r.t.ten;
@@ -611,7 +617,7 @@ function XepGioCore(H, $) {
   const TYPES = {
     perf: ['Trùng người làm', 'Người làm nghỉ chưa đủ giữa hai ca'], bn: ['Trùng người bệnh', 'Người bệnh nghỉ chưa đủ giữa hai ca'], may: ['Trùng máy', 'Máy nghỉ chưa đủ giữa hai ca'],
     order: ['Làm trước giờ chỉ định', 'Chưa đủ thời gian sau giờ chỉ định'], shift: ['Ngoài giờ làm việc'], cert: ['Người làm không có chứng chỉ còn hạn'], absent: ['Người làm không đi làm buổi đó'],
-    nomay: ['Thiếu mã máy'], pblock: ['Đụng giờ chặn của người làm'], bblock: ['Đụng giờ chặn của người bệnh']
+    nomay: ['Thiếu mã máy'], dur: ['Thời gian làm ngắn hơn quy định'], pblock: ['Đụng giờ chặn của người làm'], bblock: ['Đụng giờ chặn của người bệnh']
   };
   const typeName = c => (TYPES[c.type] || [c.type])[c.level === 'warn' ? 1 : 0] || TYPES[c.type][0];
 
@@ -621,14 +627,30 @@ function XepGioCore(H, $) {
     if (!silent) log(`Kiểm tra trùng: ${e} lỗi, ${w} cảnh báo trên ${curRows().length} ca.`);
     renderAll(); return e + w;
   }
-  function runFix() {   // dời ca đứng sau trong mỗi cặp trùng, hoặc ca đụng giờ chặn, rồi xếp lại
+  // Ca đã xanh trên HIS mà có lỗi (trùng, sai buổi, thiếu thời gian...) thì được xếp giờ mới như ca vàng; ca xanh không lỗi giữ nguyên.
+  // Trong mỗi cặp trùng, ca đứng sau được dời. Lặp vài vòng vì dời xong một ca có thể lộ ra cặp trùng khác.
+  // Ca xanh nào không tìm được giờ mới thì trả về giữ nguyên như trên HIS, để các ca khác né nó. Trả về số ca xanh được xếp giờ mới.
+  function fixGreen() {
+    const fresh = new Set();
+    for (let round = 0; round < 8; round++) {
+      const ids = new Set();
+      X.check(curRows(), staffEng(), cfg(), blocksEng()).forEach(c => { const id = c.ids[c.ids.length - 1], t = byId(id); if (t && t.tt === 3 && !App.move.has(id) && !fresh.has(id)) ids.add(id); });
+      if (!ids.size) break;
+      ids.forEach(id => { App.move.add(id); fresh.add(id); });
+      buildPlan(null);
+    }
+    const back = Array.from(App.move).filter(id => { const p = App.plan.get(id); return !p || p.status !== 'planned'; });
+    if (back.length) { back.forEach(id => App.move.delete(id)); buildPlan(null); }
+    return Array.from(fresh).filter(id => App.move.has(id)).length;
+  }
+  const planCount = st => Array.from(App.plan.values()).filter(r => r.status === st).length;
+  function runFix() {   // xếp lại các ca chưa điền, và xếp giờ mới cho ca xanh có lỗi
     if (!App.conflicts) runCheck(true);
-    const ids = new Set(App.conflicts.map(c => c.ids[c.ids.length - 1]));
-    if (!ids.size) { log('Không có ca nào cần sắp xếp lại.'); return; }
-    let saved = 0; ids.forEach(id => { const t = byId(id); if (t && t.tt === 3) { App.move.add(id); saved++; } });
-    const res = buildPlan(null), stuck = res.filter(r => r.status === 'stuck').length;
-    const left = runCheck(true);
-    log(`Tự sắp xếp lại ${ids.size} ca (${saved} ca đã lưu trên HIS sẽ được ghi lại giờ mới). Sau khi xếp: còn ${left} lỗi hoặc cảnh báo, ${stuck} ca kẹt.`);
+    const before = App.conflicts.length;
+    if (!before) { log('Không có ca nào cần sắp xếp lại.'); return; }
+    buildPlan(null);
+    const moved = fixGreen(), left = runCheck(true);
+    log(`Tự sắp xếp lại: trước đó có ${before} lỗi hoặc cảnh báo. ${moved} ca đã xanh trên HIS được xếp giờ mới, sẽ ghi đè giờ cũ khi điền. Sau khi xếp: còn ${left} lỗi hoặc cảnh báo, ${planCount('stuck')} ca kẹt.`);
     if (H.canFill && !H.noAuto && $('#autoFill').checked) runFill();
   }
 
@@ -711,7 +733,7 @@ function XepGioCore(H, $) {
   function planInfo(t) {
     const p = App.plan.get(t.id);
     if (App.skip.has(t.id)) return ['info', 'Bỏ qua lượt này'];
-    if (p && p.status === 'planned') return p.wait ? ['info', 'Chờ qua giờ kết thúc'] : ['vang', 'Dự kiến, chưa điền'];
+    if (p && p.status === 'planned') return p.wait ? ['info', 'Chờ qua giờ kết thúc'] : ['vang', t.tt === 3 ? 'Xếp lại, sẽ ghi đè giờ cũ' : 'Dự kiến, chưa điền'];
     if (p && p.status === 'stuck') return ['do', p.note];
     if (t.tt === 3) return ['xanh', App.filled.has(t.id) ? 'Đã điền' : 'Đã có trên HIS'];
     return ['vang', t.vet ? 'Chưa xếp, còn giờ cũ' : 'Chưa xếp'];
@@ -1021,8 +1043,9 @@ function XepGioCore(H, $) {
   $('#btnGoAll').addEventListener('click', () => { App.goAsk = true; renderTiles(); });   // luôn hỏi lại trước khi ghi vào HIS
   $('#goAsk').addEventListener('click', e => { const v = e.target.dataset.go; if (!v) return; if (v === 'no') { App.goAsk = false; renderTiles(); } else runGoAll(v === '1' ? 1 : 0); });
   $('#btnPlan').addEventListener('click', () => {
-    const res = buildPlan(null), n = s => res.filter(r => r.status === s).length;
-    log(`Xếp giờ cả khoa: ${n('planned')} ca đã xếp, ${n('stuck')} ca kẹt.`);
+    buildPlan(null);
+    const moved = fixGreen();
+    log(`Xếp giờ cả khoa: ${planCount('planned')} ca đã xếp, ${planCount('stuck')} ca kẹt.${moved ? ` Trong đó ${moved} ca đã xanh trên HIS có lỗi được xếp giờ mới, sẽ ghi đè giờ cũ khi điền.` : ''}`);
     runCheck(true);
   });
   $('#btnFill').addEventListener('click', () => askFill(null));
