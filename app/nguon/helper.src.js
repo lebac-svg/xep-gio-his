@@ -6,7 +6,7 @@ if (window.top !== window) return;                           // chỉ gắn ở 
 if (window.__xepgio) return;                                 // đã gắn rồi thì thôi
 const cfg0 = window.__xepgioCfg || {};
 if (cfg0.host && location.hostname !== cfg0.host) return;    // chỉ chạy trên đúng địa chỉ HIS đã khai
-window.__xepgio = { version: '0.25' };
+window.__xepgio = { version: '0.26' };
 
 /*@ENGINE*/
 /*@CORE*/
@@ -120,7 +120,7 @@ const H = {
   },
   loadSettings() {    // cài đặt dùng chung mọi ngày; chấm công lưu theo từng ngày để đánh trước được
     const st = store(), S = st.S || null, att = st.att || {}, day = (st.days || {})[R.date] || {};
-    const D = { on: {}, week: {}, note: day.note || {}, blocks: (day.blocks || []).slice(), bkSeq: (day.blocks || []).reduce((m, b) => Math.max(m, b.id), 0) };
+    const D = { on: {}, week: {}, note: day.note || {}, blocks: (day.blocks || []).slice(), wkOff: (day.wkOff || []).slice(), bkSeq: (day.blocks || []).reduce((m, b) => Math.max(m, b.id), 0) };
     ((S && S.staff) || []).forEach(p => { D.week[p.id] = weekDates().map(d => (att[d] && att[d][p.id] != null) ? att[d][p.id] : 0); D.on[p.id] = onOf(D.week[p.id][1]); });
     return { S, D };
   },
@@ -128,7 +128,7 @@ const H = {
     try {
       const st = store(); st.S = S; st.att = st.att || {}; st.days = st.days || {};
       weekDates().forEach((d, i) => { st.att[d] = st.att[d] || {}; S.staff.forEach(p => { st.att[d][p.id] = i === 1 ? lvOf(D.on[p.id] || [true, true]) : (D.week[p.id] || [])[i] || 0; }); });
-      st.days[R.date] = Object.assign({}, st.days[R.date], { note: D.note, blocks: D.blocks.filter(b => !b.auto) });
+      st.days[R.date] = Object.assign({}, st.days[R.date], { note: D.note, blocks: D.blocks.filter(b => !b.auto), wkOff: D.wkOff || [] });
       localStorage.setItem(KEY, JSON.stringify(st));
     } catch (e) {}
   },

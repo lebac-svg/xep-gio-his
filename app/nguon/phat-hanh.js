@@ -49,7 +49,7 @@ if (process.argv.indexOf('--day') >= 0) {
   run('git', ['add', '-A']);
   let changed = true;
   try { run('git', ['diff', '--cached', '--quiet'], quiet); changed = false; } catch (e) {}
-  if (changed) run('git', ['commit', '-m', 'Bản ' + man.version]);
+  if (changed) run('git', ['commit', '-m', 'Bản ' + man.version, '-m', 'Co-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>']);
   run('git', ['push', 'origin', 'HEAD']);
   let has = true;
   try { run('gh', ['release', 'view', tag], quiet); } catch (e) { has = false; }
