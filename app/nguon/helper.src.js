@@ -6,7 +6,7 @@ if (window.top !== window) return;                           // chỉ gắn ở 
 if (window.__xepgio) return;                                 // đã gắn rồi thì thôi
 const cfg0 = window.__xepgioCfg || {};
 if (cfg0.host && location.hostname !== cfg0.host) return;    // chỉ chạy trên đúng địa chỉ HIS đã khai
-window.__xepgio = { version: '0.22' };
+window.__xepgio = { version: '0.23' };
 
 /*@ENGINE*/
 /*@CORE*/
@@ -261,15 +261,23 @@ const H = {
     let row = findRow(mbp);
     if (!row) { await hisSearch(vn(R.date), vn(R.date), '3'); row = findRow(mbp); }
     if (!row) return { ok: false, err: 'không thấy phiếu ' + t.soPhieu + ' trong danh sách Đã hoàn thành của HIS' };
+    // Không chờ theo số giây cố định: mỗi bước chờ đúng dấu hiệu của HIS rồi đi tiếp ngay.
+    const dg = $j('#grdCKChitiet'), dv = String(t.ref.DICHVUKHAMBENHID), item = document.getElementById('GoHoanThanhPhieu');
+    const hasDv = () => { const ids = dg.jqGrid('getDataIDs'); for (let i = 0; i < ids.length; i++) if (String(dg.jqGrid('getRowData', ids[i]).DICHVUKHAMBENHID) === dv) return true; return false; };
+    const armed = () => { try { const ev = $j._data(item, 'events'); return !!(ev && ev.click && ev.click.length); } catch (e) { return false; } };
     g.jqGrid('setSelection', row, true);                               // chọn dòng phiếu, HIS tự tải dịch vụ của phiếu đó
-    await sleep(250); await waitFor(() => idle('load_grdCKChitiet'), 8000);
+    // HIS xem lưới dịch vụ khi kiểm tra phiếu đã ký số, nên phải chờ tới khi lưới hiện dịch vụ của đúng phiếu này
+    if (!(await waitFor(() => idle('load_grdCKChitiet') && hasDv(), 8000))) return { ok: false, err: 'HIS chưa tải được dịch vụ của phiếu ' + t.soPhieu };
     if (String(g.jqGrid('getGridParam', 'selrow')) !== String(row)) return { ok: false, err: 'không chọn được phiếu ' + t.soPhieu + ' trên lưới của HIS' };
     closeAlert();
-    $j('#GoHoanThanhPhieu').trigger('click');                          // mục "Gỡ hoàn thành phiếu" của menu chuột phải
+    // Sau mỗi lần bấm, HIS tháo mục menu ra khoảng nửa giây rồi mới gắn lại; bấm trong lúc đó là mất. Chờ tới khi mục đã được gắn lại.
+    if (!(await waitFor(armed, 2500))) await sleep(600);
+    $j(item).trigger('click');                                         // mục "Gỡ hoàn thành phiếu" của menu chuột phải
     await waitFor(() => alertText() !== '', 8000);
     const msg = alertText(); closeAlert();
-    await sleep(300); await waitFor(() => idle('load_grdCK'), 20000); await sleep(600);   // chờ HIS tải lại danh sách; mục menu cần nghỉ hơn nửa giây giữa hai lần bấm
     if (!/thành công/i.test(msg)) return { ok: false, err: msg ? 'HIS báo: ' + msg : 'HIS không báo kết quả cho phiếu ' + t.soPhieu };
+    await waitFor(() => !idle('load_grdCK'), 300);                     // gỡ xong HIS tải lại danh sách: chờ nó bắt đầu, rồi chờ xong
+    await waitFor(() => idle('load_grdCK'), 20000);
     R.tickets.forEach(x => { if (String(x.ref.MAUBENHPHAMID) === mbp) { x.tt = 2; x.vet = x.s != null; } });
     return { ok: true };
   },
