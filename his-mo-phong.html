@@ -41,7 +41,7 @@ p { margin: 0; }
 .tabs { display: flex; gap: 2px; overflow-x: auto; border-bottom: 1px solid var(--line); }
 .tabs button { border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: none; padding: 8px 9px; white-space: nowrap; color: var(--muted); font-weight: 500; font-size: 13px; }
 .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
-.tabs .cnt { font-size: 11px; background: var(--do-bg); color: var(--do-ink); border-radius: 999px; padding: 0 6px; margin-left: 4px; }
+.cnt { font-size: 11px; background: var(--do-bg); color: var(--do-ink); border-radius: 999px; padding: 0 6px; margin-left: 4px; }
 
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); min-width: 0; }
 .panel > header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--line); }
@@ -117,8 +117,30 @@ td .sub { color: var(--muted); font-size: 12px; margin-left: 6px; }
 .note.bad { background: var(--do-bg); color: var(--do-ink); }
 .note.good { background: var(--xanh-bg); color: var(--xanh-ink); }
 .note.warn { background: var(--vang-bg); color: var(--vang-ink); }
-.log { font-size: 12px; max-height: 180px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; background: var(--sunk); font-variant-numeric: tabular-nums; }
+.log { font-size: 12px; max-height: 80px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; background: var(--sunk); font-variant-numeric: tabular-nums; }
 .log div { padding: 1px 0; overflow-wrap: anywhere; }
+.log.open { max-height: 420px; }
+/* Thanh trên và menu Chức năng */
+.menubar { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.menubar #ccInfo { flex: 1 1 220px; min-width: 0; font-size: 13px; }
+.menubtn { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
+.menubtn::before { content: ""; width: 14px; height: 10px; border-block: 2px solid currentColor; background: linear-gradient(currentColor, currentColor) center / 100% 2px no-repeat; }
+.menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; width: min(460px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: 0 10px 30px rgba(0, 0, 0, .18); padding: 8px; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 4px 12px; }
+.mgrp { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mgrp > span { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); padding: 4px 8px; }
+.mgrp button { border: 0; background: none; text-align: left; padding: 7px 8px; border-radius: 6px; }
+.mgrp button:hover:not(:disabled) { background: var(--sunk); }
+details.card { background: var(--surface); }
+details.fold > summary .sum { font-weight: 400; color: var(--muted); font-size: 13px; margin-left: 8px; }
+/* Cửa sổ nổi */
+.pop { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, .4); display: flex; align-items: flex-start; justify-content: center; padding: 16px; }
+.popbox { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); width: min(1000px, 100%); max-height: 100%; display: flex; flex-direction: column; box-shadow: 0 16px 48px rgba(0, 0, 0, .28); min-width: 0; }
+.popbox > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.popbody { padding: 16px; overflow: auto; display: flex; flex-direction: column; gap: 16px; min-height: 0; }
+/* Danh sách thiết lập lần đầu */
+.setup { border: 1px dashed var(--muted); border-radius: var(--r); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.setup .it { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; }
+.setup .it.done { color: var(--muted); }
 details { font-size: 13px; }
 summary { cursor: pointer; color: var(--accent); font-weight: 500; }
 .how { margin: 6px 0 0; padding-left: 18px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
@@ -165,25 +187,43 @@ summary { cursor: pointer; color: var(--accent); font-weight: 500; }
   </div>
 
   <!-- APP-HTML-START -->
-  <div class="tabs" role="tablist" id="tabs">
-    <button type="button" role="tab" data-tab="run">Chạy hằng ngày</button>
-    <button type="button" role="tab" data-tab="bang">Bảng giờ</button>
-    <button type="button" role="tab" data-tab="trung">Lọc trùng<span class="cnt" id="cntTrung" hidden></span></button>
-    <button type="button" role="tab" data-tab="cc">Chấm công</button>
-    <button type="button" role="tab" data-tab="cd">Cài đặt</button>
+  <!-- ===== Thanh trên: menu Chức năng và tóm tắt hôm nay ===== -->
+  <div class="menubar" id="menubar">
+    <button type="button" id="menuBtn" class="menubtn" aria-haspopup="true" aria-expanded="false" aria-controls="menu">Chức năng</button>
+    <p class="muted" id="ccInfo"></p>
+    <div class="row"><button type="button" class="link" data-open="cc">Chấm công</button><button type="button" class="link" data-open="bk">Chặn giờ</button></div>
+    <div class="menu" id="menu" hidden>
+      <div class="mgrp"><span>Hằng ngày</span>
+        <button type="button" data-open="bang">Bảng giờ</button>
+        <button type="button" data-open="trung">Lọc trùng</button>
+        <button type="button" data-open="cc">Chấm công</button>
+        <button type="button" data-open="bk">Chặn giờ</button>
+        <button type="button" data-open="sot">Phiếu sót các ngày trước</button>
+      </div>
+      <div class="mgrp"><span>Thiết lập một lần</span>
+        <button type="button" data-open="staff">Nhân viên</button>
+        <button type="button" data-open="cert">Chứng chỉ</button>
+        <button type="button" data-open="prio">Ưu tiên người làm</button>
+        <button type="button" data-open="svc">Thủ thuật và máy</button>
+        <button type="button" data-open="param">Giờ làm việc và khoảng nghỉ</button>
+        <button type="button" data-open="file">Chuyển cài đặt sang máy khác</button>
+      </div>
+    </div>
   </div>
 
-  <!-- ===== Chạy hằng ngày: số liệu, ba bước, nhật ký ===== -->
+  <!-- ===== Màn chính: chỉ việc hằng ngày ===== -->
   <section class="panel" id="tab-run">
     <div class="body">
       <div class="tiles" id="tiles"></div>
       <div class="note warn" id="dirtyNote" hidden>Chấm công, chặn giờ hoặc cài đặt đã đổi sau lần xếp gần nhất. Bấm Xếp giờ để tính lại.</div>
       <div class="note" id="roNote" hidden>Bản này chỉ đọc số liệu từ HIS: xếp giờ và soát trùng được, chưa gỡ xanh và chưa điền vào HIS.</div>
+      <div class="setup" id="setupBox" hidden></div>
       <div class="steps">
         <div class="step"><div class="step-h"><span class="n">1</span><h3>Gỡ xanh</h3></div><p class="muted" id="goInfo"></p><div class="row"><button id="btnGoAll" type="button">Gỡ xanh</button></div></div>
-        <div class="step"><div class="step-h"><span class="n">2</span><h3>Xếp giờ</h3></div><p class="muted">Tính giờ, người làm và máy cho cả khoa, rồi tự soát trùng. Chưa ghi gì vào HIS.</p><p class="muted" id="ccInfo"></p>
-          <div class="row"><button id="btnPlan" type="button" class="primary">Xếp giờ</button><button type="button" class="link" data-goto="cc">Chấm công, chặn giờ</button></div>
+        <div class="step"><div class="step-h"><span class="n">2</span><h3>Xếp giờ</h3></div>
+          <div class="row"><button id="btnPlan" type="button" class="primary">Xếp giờ</button></div>
           <details><summary>Cách app xếp giờ</summary><ul class="how">
+            <li>App tính giờ, người làm và máy cho cả khoa rồi tự soát trùng. Bước này chưa ghi gì vào HIS.</li>
             <li>Ca đã xanh trên HIS được giữ nguyên giờ, trừ khi nó có lỗi hoặc phải dời để lấy chỗ cho ca đang kẹt. Ca xanh của người bệnh đã ra viện luôn giữ nguyên.</li>
             <li>Mỗi phiếu vàng được đặt vào giờ sớm nhất mà người bệnh, người làm và máy đều trống, sau giờ chỉ định 5 phút và trong giờ làm việc.</li>
             <li>Người làm được chọn trong những người có chứng chỉ và đi làm buổi đó: ưu tiên 1 trước, rồi đến người đang ít ca hơn.</li>
@@ -191,7 +231,7 @@ summary { cursor: pointer; color: var(--accent); font-weight: 500; }
             <li>Mỗi người bệnh có ca ở cả buổi sáng và buổi chiều.</li>
             <li>Ca không còn chỗ thì app xem lại cả giờ của các ca đã xanh và dời những ca cần dời. Vẫn không xếp được thì ghi rõ lý do ở cột Trạng thái.</li>
           </ul></details></div>
-        <div class="step"><div class="step-h"><span class="n">3</span><h3>Điền vào HIS</h3></div><p class="muted">Điền các ca đã qua giờ kết thúc. App hỏi lại trước khi ghi.</p>
+        <div class="step"><div class="step-h"><span class="n">3</span><h3>Điền vào HIS</h3></div>
           <div class="row"><button id="btnFill" type="button" class="primary">Điền vào HIS</button><button id="btnStop" type="button" disabled>Dừng</button>
             <select id="speed" aria-label="Tốc độ điền"><option value="0">Nhanh</option><option value="320">Chậm, xem từng bước</option></select></div>
           <label for="autoFill"><input type="checkbox" id="autoFill"> Tự điền tiếp khi ca qua giờ</label>
@@ -200,15 +240,16 @@ summary { cursor: pointer; color: var(--accent); font-weight: 500; }
 
       <div class="note warn" id="goAsk" hidden></div>
       <div class="note warn" id="fillAsk" hidden></div>
+      <div class="note bar" id="sotBox" hidden><span id="sotTitle"></span><button type="button" class="small" data-open="sot">Xem</button></div>
 
-      <div class="sec"><h3>Nhật ký</h3><div class="log" id="log" aria-live="polite"></div></div>
-      <details class="fold" id="sotBox" hidden><summary id="sotTitle"></summary><div class="in"><div class="scroll" style="max-height:220px"><table id="sotTable"></table></div></div></details>
+      <div class="sec"><div class="bar"><h3>Nhật ký</h3><button type="button" class="link" id="logMore">Xem hết</button></div><div class="log" id="log" aria-live="polite"></div></div>
     </div>
   </section>
 
-  <!-- ===== Bảng giờ: một bảng cho mọi ca, đổi cách xem bằng nút ===== -->
-  <section class="panel" id="tab-bang" hidden>
-    <div class="body">
+  <!-- ===== Bảng giờ: mở ra, thu lại ngay dưới màn chính ===== -->
+  <details class="fold card" id="tab-bang">
+    <summary>Bảng giờ <span class="sum" id="bangSum"></span></summary>
+    <div class="in">
       <div class="bar">
         <div class="seg" id="bangView" role="group" aria-label="Cách xem">
           <button type="button" data-view="gio">Theo giờ</button><button type="button" data-view="bn">Theo người bệnh</button><button type="button" data-view="perf">Theo người làm</button><button type="button" data-view="tl">Thanh thời gian</button>
@@ -235,75 +276,78 @@ summary { cursor: pointer; color: var(--accent); font-weight: 500; }
         <p class="muted" id="tlInfo">Theo người làm: mỗi ô là quãng người đó trực tiếp làm. Theo người bệnh hoặc máy: mỗi ô là cả ca. Rê chuột hoặc bấm vào ô để xem chi tiết; bấm tên người làm để chỉ xem người đó.</p>
       </div>
     </div>
-  </section>
+  </details>
 
   <!-- ===== Lọc trùng ===== -->
-  <section class="panel" id="tab-trung" hidden>
-    <div class="body">
+  <details class="fold card" id="tab-trung">
+    <summary>Lọc trùng <span class="cnt" id="cntTrung" hidden></span></summary>
+    <div class="in">
       <div class="bar"><div class="tiles" id="trungTiles" style="flex:1 1 260px"></div>
         <div class="row"><select id="trungType" aria-label="Lọc loại lỗi"></select><button id="btnCheck2" type="button">Kiểm tra trùng</button><button id="btnFix2" type="button" class="primary">Tự sắp xếp lại</button></div></div>
       <div class="scroll"><table id="trungTable"></table></div>
     </div>
-  </section>
+  </details>
 
-  <!-- ===== Chấm công: ai đi làm, ai bận giờ nào ===== -->
-  <section class="panel" id="tab-cc" hidden>
-    <div class="body">
-      <div class="sec">
-        <div class="bar"><h3 id="ccTitle">Chấm công</h3>
-          <div class="row"><button id="ccEdit" type="button">Cập nhật danh sách</button><button id="ccAll" type="button">Tất cả đi làm</button><button id="ccPrev" type="button">Giống hôm qua</button></div></div>
-        <div class="col gap8" id="stMgrCC" hidden></div>
-        <div class="scroll tall"><table id="ccDay"></table></div>
-      </div>
-      <div class="sec">
-        <div class="bar"><h3>Chặn giờ trong ngày</h3><span class="muted">Dòng "tự động" là bác sĩ khám người bệnh mới vào trong ngày</span></div>
-        <div class="scroll tall"><table id="blocks"></table></div>
-        <div class="row">
-          <select id="bkKind" aria-label="Loại chặn"><option value="perf">Chặn người làm</option><option value="bn">Chặn người bệnh</option><option value="rv">Ra viện, xử trí</option></select>
-          <select id="bkWho" aria-label="Người bị chặn"></select>
-          <label for="bkS">Từ <input type="time" id="bkS" value="08:00"></label>
-          <label for="bkE" id="bkELabel">Đến <input type="time" id="bkE" value="08:10"></label>
-          <button id="bkAdd" type="button">Thêm chặn giờ</button>
+  <!-- ===== Cửa sổ nổi: chấm công, chặn giờ, phiếu sót và từng mục cài đặt ===== -->
+  <div class="pop" id="pop" hidden>
+    <div class="popbox" role="dialog" aria-modal="true" aria-labelledby="popTitle">
+      <header><h2 id="popTitle"></h2><button type="button" id="popClose" class="primary">Xong</button></header>
+      <div class="popbody">
+        <div id="tab-cc" class="col">
+          <div class="sec" data-pop="cc">
+            <div class="bar"><h3 id="ccTitle">Chấm công</h3>
+              <div class="row"><button id="ccEdit" type="button">Cập nhật danh sách</button><button id="ccAll" type="button">Tất cả đi làm</button><button id="ccPrev" type="button">Giống hôm qua</button></div></div>
+            <div class="col gap8" id="stMgrCC" hidden></div>
+            <div class="scroll tall"><table id="ccDay"></table></div>
+            <details class="fold" id="ccWeekBox"><summary>Đánh trước cả tuần</summary><div class="in">
+              <p class="muted">Cột ghi "ngày chạy" là ngày đang chạy; sửa ở đâu thì bảng trên đổi theo.</p>
+              <div class="scroll tall"><table id="ccWeek" class="sticky1"></table></div></div></details>
+          </div>
+          <div class="sec" data-pop="bk">
+            <p class="muted">Dòng "tự động" là bác sĩ khám người bệnh mới vào trong ngày. Thêm chặn khi người bệnh đi chẩn đoán hình ảnh, ra viện, hoặc người làm bận việc khác.</p>
+            <div class="scroll tall"><table id="blocks"></table></div>
+            <div class="row">
+              <select id="bkKind" aria-label="Loại chặn"><option value="perf">Chặn người làm</option><option value="bn">Chặn người bệnh</option><option value="rv">Ra viện, xử trí</option></select>
+              <select id="bkWho" aria-label="Người bị chặn"></select>
+              <label for="bkS">Từ <input type="time" id="bkS" value="08:00"></label>
+              <label for="bkE" id="bkELabel">Đến <input type="time" id="bkE" value="08:10"></label>
+              <button id="bkAdd" type="button">Thêm chặn giờ</button>
+            </div>
+          </div>
+        </div>
+        <div class="sec" data-pop="sot"><div class="scroll tall"><table id="sotTable"></table></div></div>
+        <div id="tab-cd" class="col">
+          <div class="sec" data-pop="staff"><div class="col gap8" id="stMgrCD"></div></div>
+          <div class="sec" data-pop="cert">
+            <p class="muted">Tích ô Có chứng chỉ cho người có chứng chỉ đó, rồi bỏ tích riêng thủ thuật người đó không làm. Chứng chỉ hết hạn trước ngày chạy thì app ngừng xếp nhóm đó.</p>
+            <div class="row" id="certMgr"></div><p class="muted" id="certMsg"></p>
+            <div class="scroll tall"><table id="certTable" class="sticky1"></table></div></div>
+          <div class="sec" data-pop="prio">
+            <p class="muted">1 là ưu tiên, 2 là thường, 3 là dự phòng. Ô trống là người đó không có chứng chỉ.</p>
+            <div class="scroll tall"><table id="prioTable" class="sticky1"></table></div></div>
+          <div class="sec" data-pop="svc">
+            <div class="bar"><p class="muted" id="svHelp" style="flex:1 1 320px"></p><div class="row"><span class="muted" id="svStamp"></span><button id="mayFetch" type="button" hidden>Lấy danh sách máy từ HIS</button><button id="svEdit" type="button">Cập nhật</button></div></div>
+            <div class="scroll tall"><table id="svcTable"></table></div>
+            <div class="row" id="svFoot" hidden><button id="svAdd" type="button">Thêm thủ thuật</button><span class="muted" id="svMsg"></span></div></div>
+          <div class="sec" data-pop="param">
+            <div class="fields">
+              <label for="pA0">Ca sáng từ<input type="time" id="pA0"></label><label for="pA1">Ca sáng đến<input type="time" id="pA1"></label>
+              <label for="pB0">Ca chiều từ<input type="time" id="pB0"></label><label for="pB1">Ca chiều đến<input type="time" id="pB1"></label>
+              <label for="pLead">Sau giờ chỉ định (phút)<input type="number" id="pLead" min="0" max="60"></label>
+              <label for="pGapPerf">Người làm nghỉ giữa hai ca (phút)<input type="number" id="pGapPerf" min="0" max="30"></label>
+              <label for="pGapBn">Người bệnh nghỉ giữa hai ca (phút)<input type="number" id="pGapBn" min="0" max="60"></label>
+              <label for="pGapMay">Máy nghỉ giữa hai ca (phút)<input type="number" id="pGapMay" min="0" max="30"></label>
+              <label for="pNew">Chặn bác sĩ khi có người bệnh mới (phút)<input type="number" id="pNew" min="0" max="60"></label>
+              <label for="pSpread">Chia ca<select id="pSpread"><option value="1">Chia cả sáng và chiều</option><option value="0">Xếp sớm nhất có thể</option></select></label>
+            </div></div>
+          <div class="sec" data-pop="file">
+            <p class="muted">Sao chép đoạn này để chuyển sang máy khác, hoặc dán vào rồi bấm Nạp.</p>
+            <textarea id="cfgText" rows="6" aria-label="Nội dung cài đặt"></textarea>
+            <div class="row"><button id="cfgCopy" type="button">Sao chép</button><button id="cfgLoad" type="button">Nạp</button><span class="muted" id="cfgMsg"></span></div></div>
         </div>
       </div>
-      <details class="fold" id="ccWeekBox"><summary>Đánh trước cả tuần</summary><div class="in">
-        <p class="muted">Cột ghi "ngày chạy" là ngày đang chạy; sửa ở đâu thì bảng trên đổi theo.</p>
-        <div class="scroll tall"><table id="ccWeek" class="sticky1"></table></div></div></details>
     </div>
-  </section>
-
-  <!-- ===== Cài đặt: mỗi mục một ngăn, bấm tên mục để mở ===== -->
-  <section class="panel" id="tab-cd" hidden>
-    <div class="body">
-      <details class="fold" id="cdStaff" open><summary>Nhân viên</summary><div class="in"><div class="col gap8" id="stMgrCD"></div></div></details>
-      <details class="fold" id="cdCert"><summary>Chứng chỉ: ai được làm thủ thuật nào</summary><div class="in">
-        <p class="muted">Tích ô Có chứng chỉ cho người có chứng chỉ đó, rồi bỏ tích riêng thủ thuật người đó không làm. Chứng chỉ hết hạn trước ngày chạy thì app ngừng xếp nhóm đó.</p>
-        <div class="row" id="certMgr"></div><p class="muted" id="certMsg"></p>
-        <div class="scroll tall"><table id="certTable" class="sticky1"></table></div></div></details>
-      <details class="fold" id="cdPrio"><summary>Ưu tiên người làm cho từng thủ thuật</summary><div class="in">
-        <p class="muted">1 là ưu tiên, 2 là thường, 3 là dự phòng. Ô trống là người đó không có chứng chỉ.</p>
-        <div class="scroll tall"><table id="prioTable" class="sticky1"></table></div></div></details>
-      <details class="fold" id="cdSvc" open><summary>Thủ thuật và máy</summary><div class="in">
-        <div class="bar"><p class="muted" id="svHelp" style="flex:1 1 320px"></p><div class="row"><span class="muted" id="svStamp"></span><button id="mayFetch" type="button" hidden>Lấy danh sách máy từ HIS</button><button id="svEdit" type="button">Cập nhật</button></div></div>
-        <div class="scroll tall"><table id="svcTable"></table></div>
-        <div class="row" id="svFoot" hidden><button id="svAdd" type="button">Thêm thủ thuật</button><span class="muted" id="svMsg"></span></div></div></details>
-      <details class="fold" id="cdParam"><summary>Giờ làm việc và khoảng nghỉ</summary><div class="in">
-        <div class="fields">
-          <label for="pA0">Ca sáng từ<input type="time" id="pA0"></label><label for="pA1">Ca sáng đến<input type="time" id="pA1"></label>
-          <label for="pB0">Ca chiều từ<input type="time" id="pB0"></label><label for="pB1">Ca chiều đến<input type="time" id="pB1"></label>
-          <label for="pLead">Sau giờ chỉ định (phút)<input type="number" id="pLead" min="0" max="60"></label>
-          <label for="pGapPerf">Người làm nghỉ giữa hai ca (phút)<input type="number" id="pGapPerf" min="0" max="30"></label>
-          <label for="pGapBn">Người bệnh nghỉ giữa hai ca (phút)<input type="number" id="pGapBn" min="0" max="60"></label>
-          <label for="pGapMay">Máy nghỉ giữa hai ca (phút)<input type="number" id="pGapMay" min="0" max="30"></label>
-          <label for="pNew">Chặn bác sĩ khi có người bệnh mới (phút)<input type="number" id="pNew" min="0" max="60"></label>
-          <label for="pSpread">Chia ca<select id="pSpread"><option value="1">Chia cả sáng và chiều</option><option value="0">Xếp sớm nhất có thể</option></select></label>
-        </div></div></details>
-      <details class="fold" id="cdFile"><summary>Chuyển cài đặt sang máy khác</summary><div class="in">
-        <p class="muted">Sao chép đoạn này để chuyển sang máy khác, hoặc dán vào rồi bấm Nạp.</p>
-        <textarea id="cfgText" rows="4" aria-label="Nội dung cài đặt"></textarea>
-        <div class="row"><button id="cfgCopy" type="button">Sao chép</button><button id="cfgLoad" type="button">Nạp</button><span class="muted" id="cfgMsg"></span></div></div></details>
-    </div>
-  </section>
+  </div>
 
   <div id="tip" hidden></div>
   <!-- APP-HTML-END -->
@@ -553,11 +597,12 @@ function XepGioCore(H, $) {
   }
   function defaults() {
     const seed = H.seed();
-    Object.assign(S, { staff: seed.staff, groups: JSON.parse(JSON.stringify(seed.groups)), certs: JSON.parse(JSON.stringify(seed.certs)), may: JSON.parse(JSON.stringify(seed.may || {})), stamp: '', shifts: [[450, 720], [780, 990]], lead: 5, gapPerf: 1, gapBn: 5, gapMay: 1, tol: 15, newBlock: 10, spread: true, mayOff: [], mayV: 0 });
+    Object.assign(S, { staff: seed.staff, groups: JSON.parse(JSON.stringify(seed.groups)), certs: JSON.parse(JSON.stringify(seed.certs)), may: JSON.parse(JSON.stringify(seed.may || {})), stamp: '', shifts: [[450, 720], [780, 990]], lead: 5, gapPerf: 1, gapBn: 5, gapMay: 1, tol: 15, newBlock: 10, spread: true, mayOff: [], mayV: 0, setup: null });
     D.on = seed.on || {}; D.note = {}; D.week = seed.week || {}; D.blocks = []; D.bkSeq = 0;
     const saved = H.loadSettings ? H.loadSettings() : null;
     if (saved && saved.S) Object.assign(S, saved.S);
     normMay();
+    if (!S.setup) { const done = !!(saved && saved.S && S.staff.length); S.setup = { staff: done, cert: done, svc: done, param: done }; }   // máy đã có cài đặt từ trước thì coi như thiết lập xong
     if (saved && saved.D) Object.assign(D, saved.D);
     S.staff.forEach(ensureStaff);
   }
@@ -833,7 +878,8 @@ function XepGioCore(H, $) {
     const filtered = !!(find || fp || fs);
     $('#dsInfo').textContent = !H.tickets.length ? 'Chưa có danh sách. Tải danh sách của ngày cần chạy trước.'
       : `Ngày ${H.dateLabel}: ${all.length} thủ thuật của ${new Set(all.map(x => x.t.bn)).size} người bệnh · ${n('his')} đã lưu trên HIS · ${n('plan')} dự kiến · ${n('none')} chưa có giờ${filtered ? ' · đang hiện ' + list.length + ' dòng khớp bộ lọc' : ''}`;
-    if (view === 'tl') return;
+    $('#bangSum').textContent = H.tickets.length ? `${all.length} thủ thuật · ${n('his')} đã lưu · ${n('plan')} dự kiến · ${n('none')} chưa có giờ` : '';
+    if (view === 'tl' || !$('#tab-bang').open) return;
     const time = x => x.v ? x.v.s : 9999, cmp = (a, b) => String(a).localeCompare(String(b), 'vi'), byTime = (a, b) => time(a) - time(b) || cmp(a.t.tenBN, b.t.tenBN) || (a.t.id < b.t.id ? -1 : 1);
     const line = (x, showBn) => {
       const t = x.t, v = x.v; let who = esc(x.who);
@@ -903,7 +949,7 @@ function XepGioCore(H, $) {
     $('#ccTitle').textContent = 'Chấm công ngày ' + H.dateLabel;
     const c = $('#cntTrung'); c.hidden = !errs; c.textContent = errs || '';
     renderFillAsk();
-    const an = $('#autoNote'); an.hidden = !(H.autoNote || App.autoStop); an.textContent = App.autoStop ? 'Tự điền đang tạm dừng vì lần điền trước có lỗi.' : (H.autoNote || '');
+    const an = $('#autoNote'); an.hidden = !(App.autoStop || (H.autoNote && (H.noAuto || $('#autoFill').checked))); an.textContent = App.autoStop ? 'Tự điền đang tạm dừng vì lần điền trước có lỗi.' : (H.autoNote || '');
     const af = $('#autoFill').closest('label'); if (af) af.hidden = !!H.noAuto;   // HIS thật: chưa cho tự điền, mỗi lượt điền đều phải bấm và xác nhận
   }
   function renderTrung() {
@@ -919,6 +965,7 @@ function XepGioCore(H, $) {
       : `<tr><td colspan="3" class="empty">${c.length ? 'Không có lỗi loại này.' : 'Không có ca nào trùng hoặc sai quy tắc trong ' + rows.size + ' ca đã soát.'}</td></tr>`) + '</tbody>';
   }
   function renderTL() {
+    if (!$('#tab-bang').open || App.view !== 'tl') return;
     // Theo người làm: mỗi ô là quãng trực tiếp làm, nên các ô của một người không chồng lên nhau. Theo người bệnh hoặc máy: mỗi ô là cả ca.
     const mode = $('#tlMode').value, rows = curRows(), sh = S.shifts, ppm = mode === 'perf' ? 3.2 : 2.4, find = fold($('#bangSearch').value.trim());
     const t0 = sh[0][0] - 15, t1 = sh[sh.length - 1][1] + 15, W = Math.round((t1 - t0) * ppm), px = m => Math.round((Math.max(t0, Math.min(t1, m)) - t0) * ppm);
@@ -1074,10 +1121,10 @@ function XepGioCore(H, $) {
   // Phiếu sót: thủ thuật của các ngày trước vẫn chưa được cập nhật (bộ nối cung cấp danh sách)
   function renderSot() {
     const m = H.missed || [];
-    $('#sotBox').hidden = !m.length; if (!m.length) return;
+    $('#sotBox').hidden = !m.length;
     $('#sotTitle').textContent = 'Phiếu sót của các ngày trước: ' + m.length + ' thủ thuật chưa cập nhật';
     $('#sotTable').innerHTML = '<thead><tr><th>Ngày chỉ định</th><th>Người bệnh</th><th>Mã BA</th><th>Thủ thuật</th><th>BS chỉ định</th><th>Ghi chú</th></tr></thead><tbody>' +
-      m.map(x => `<tr><td>${esc(x.ngay)}</td><td>${esc(x.tenBN)}</td><td>${esc(x.maBA)}</td><td>${esc(x.ten)}</td><td>${esc(x.bs || '')}</td><td>${x.cu ? 'còn giờ cũ' : 'chưa có giờ'}</td></tr>`).join('') + '</tbody>';
+      (m.length ? '' : '<tr><td colspan="6" class="empty">Không có phiếu sót trong 7 ngày trước ngày chạy.</td></tr>') + m.map(x => `<tr><td>${esc(x.ngay)}</td><td>${esc(x.tenBN)}</td><td>${esc(x.maBA)}</td><td>${esc(x.ten)}</td><td>${esc(x.bs || '')}</td><td>${x.cu ? 'còn giờ cũ' : 'chưa có giờ'}</td></tr>`).join('') + '</tbody>';
   }
   // Đọc danh sách mã máy từ form của HIS cho từng thủ thuật có ca trong ngày. Máy mới được thêm ở trạng thái chưa tích, vì HIS có thể liệt kê cả máy của nơi khác.
   async function runMayFetch() {
@@ -1094,19 +1141,37 @@ function XepGioCore(H, $) {
     log(App.svMsg); if (added) touch(); dirty();
   }
   function renderPerfFilter() { const v = $('#planPerf').value; $('#planPerf').innerHTML = '<option value="">Mọi người làm</option>' + S.staff.map(s => `<option value="${esc(s.id)}">${esc(s.ten)}</option>`).join(''); $('#planPerf').value = v; }
-  function renderAll() { refreshWork(); renderPerfFilter(); renderTiles(); renderSot(); renderBlocks(); renderBang(); renderTrung(); renderTL(); renderCC(); renderCD(); }
+  const SETUP = [['staff', 'Nhân viên và tài khoản HIS'], ['cert', 'Chứng chỉ của từng người'], ['svc', 'Thủ thuật và máy đang dùng'], ['param', 'Giờ làm việc và khoảng nghỉ']];
+  function renderSetup() {   // hiện cho tới khi cả bốn mục được đánh dấu xong; sau đó các mục này chỉ còn trong menu Chức năng
+    const su = S.setup || {}, box = $('#setupBox'), left = SETUP.filter(x => !su[x[0]]).length;
+    box.hidden = !left; if (!left) return;
+    const info = { staff: `${S.staff.length} người, ${S.staff.filter(p => !p.user).length} người chưa có tài khoản HIS`, cert: `${S.staff.filter(p => p.cc && Object.keys(p.cc).some(k => p.cc[k] && p.cc[k].co)).length} người đã tích chứng chỉ`,
+      svc: `${S.groups.reduce((k, g) => k + (g.skip ? 0 : (machinesOf(g) || []).length), 0)} máy đang tích`, param: `${hm(S.shifts[0][0])}–${hm(S.shifts[0][1])} và ${hm(S.shifts[1][0])}–${hm(S.shifts[1][1])}` };
+    box.innerHTML = '<div class="bar"><h3>Thiết lập lần đầu trên máy này</h3><button type="button" class="link" data-setup="all">Ẩn danh sách này</button></div>' +
+      SETUP.map(x => `<div class="it${su[x[0]] ? ' done' : ''}"><span>${su[x[0]] ? 'Đã xong: ' : ''}${esc(x[1])} <span class="muted">· ${esc(info[x[0]])}</span></span><span class="row"><button type="button" class="small" data-open="${x[0]}">Mở</button>${su[x[0]] ? '' : `<button type="button" class="small" data-setup="${x[0]}">Đã xong</button>`}</span></div>`).join('');
+  }
+  function renderAll() { refreshWork(); renderPerfFilter(); renderTiles(); renderSetup(); renderSot(); renderBlocks(); renderBang(); renderTrung(); renderTL(); renderCC(); renderCD(); }
 
   /* ---------- sự kiện ---------- */
-  const TABS = ['run', 'bang', 'trung', 'cc', 'cd'];
-  function showTab(k) {
-    if (['bn', 'ds', 'lam', 'tl'].indexOf(k) >= 0) k = 'bang';   // các thẻ cũ nay nằm chung trong Bảng giờ
-    if (TABS.indexOf(k) < 0) k = 'run';
-    Array.from($('#tabs').querySelectorAll('button')).forEach(b => b.setAttribute('aria-selected', b.dataset.tab === k ? 'true' : 'false'));
-    TABS.forEach(t => { $('#tab-' + t).hidden = t !== k; });
-    try { localStorage.setItem('xg-tab', k); } catch (e) {}
+  // Bảng giờ và Lọc trùng mở ra ngay dưới màn chính; các phần còn lại mở thành cửa sổ nổi, mỗi lần một phần.
+  const POPS = { cc: 'Chấm công', bk: 'Chặn giờ trong ngày', sot: 'Phiếu sót của các ngày trước', staff: 'Nhân viên', cert: 'Chứng chỉ: ai được làm thủ thuật nào', prio: 'Ưu tiên người làm cho từng thủ thuật', svc: 'Thủ thuật và máy', param: 'Giờ làm việc và khoảng nghỉ', file: 'Chuyển cài đặt sang máy khác' };
+  const closeMenu = () => { $('#menu').hidden = true; $('#menuBtn').setAttribute('aria-expanded', 'false'); };
+  function closePop() { $('#pop').hidden = true; App.pop = null; }
+  function openThing(k) {
+    closeMenu();
+    if (k === 'bang' || k === 'trung') { closePop(); const d = $('#tab-' + k); d.open = true; redraw(); try { d.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) {} return; }
+    if (!POPS[k]) { closePop(); return; }
+    App.pop = k; $('#popTitle').textContent = POPS[k];
+    Array.from($('#pop').querySelectorAll('[data-pop]')).forEach(el => { el.hidden = el.dataset.pop !== k; });
+    $('#tab-cc').hidden = k !== 'cc' && k !== 'bk'; $('#tab-cd').hidden = ['staff', 'cert', 'prio', 'svc', 'param', 'file'].indexOf(k) < 0;
+    $('#pop').hidden = false;
+  }
+  function showTab(k) {   // tên thẻ của các bản trước vẫn dùng được
+    if (['bn', 'ds', 'lam', 'tl'].indexOf(k) >= 0) k = 'bang';
+    if (k === 'cd') k = 'staff';
+    openThing(k === 'run' ? '' : k);
   }
   const tid = v => { const t = H.tickets.find(x => String(x.id) === String(v)); return t ? t.id : v; };
-  $('#tabs').addEventListener('click', e => { const b = e.target.closest('button[data-tab]'); if (b) showTab(b.dataset.tab); });
   $('#btnGoAll').addEventListener('click', () => { App.goAsk = true; renderTiles(); });   // luôn hỏi lại trước khi ghi vào HIS
   $('#goAsk').addEventListener('click', e => { const v = e.target.dataset.go; if (!v) return; if (v === 'no') { App.goAsk = false; renderTiles(); } else runGoAll(v === '1' ? 1 : 0, v === 're'); });
   $('#btnPlan').addEventListener('click', () => {
@@ -1120,13 +1185,31 @@ function XepGioCore(H, $) {
   $('#btnStop').addEventListener('click', () => { App.stop = true; });
   // Ô tự điền: mặc định không tích; người dùng tích hay bỏ thì nhớ lại cho lần mở sau, app không tự tích lại
   try { $('#autoFill').checked = localStorage.getItem('xg-auto') === '1'; } catch (e) {}
-  $('#autoFill').addEventListener('change', e => { try { localStorage.setItem('xg-auto', e.target.checked ? '1' : '0'); } catch (err) {} });
+  $('#autoFill').addEventListener('change', e => { try { localStorage.setItem('xg-auto', e.target.checked ? '1' : '0'); } catch (err) {} renderTiles(); });
   $('#btnCheck2').addEventListener('click', () => runCheck()); $('#btnFix2').addEventListener('click', runFix);
-  const redraw = () => { renderBang(); renderTL(); };
+  const redraw = () => { if (!S.staff) return; renderBang(); renderTL(); };   // chưa nạp cài đặt thì chưa có gì để vẽ
   $('#planPerf').addEventListener('change', redraw); $('#planSt').addEventListener('change', redraw); $('#bangSearch').addEventListener('input', redraw);
   $('#bangView').addEventListener('click', e => { const b = e.target.closest('button[data-view]'); if (b) setView(b.dataset.view); });
   // nút và ô số liệu dẫn sang đúng chỗ cần xem: 'cc', 'trung', hoặc 'bang:<trạng thái>'
-  $('#tab-run').addEventListener('click', e => { const b = e.target.closest('[data-goto]'); if (!b) return; const a = b.dataset.goto.split(':'); if (a[0] === 'bang') { $('#planSt').value = a[1] || ''; $('#planPerf').value = ''; $('#bangSearch').value = ''; if (App.view === 'tl') App.view = 'gio'; redraw(); } showTab(a[0]); });
+  $('#tab-run').addEventListener('click', e => {
+    const su = e.target.closest('[data-setup]');
+    if (su) { const k = su.dataset.setup; SETUP.forEach(x => { if (k === 'all' || k === x[0]) S.setup[x[0]] = true; }); persist(); renderSetup(); return; }
+    const b = e.target.closest('[data-goto]'); if (!b) return;
+    const a = b.dataset.goto.split(':');
+    if (a[0] === 'bang') { $('#planSt').value = a[1] || ''; $('#planPerf').value = ''; $('#bangSearch').value = ''; if (App.view === 'tl') App.view = 'gio'; }
+    openThing(a[0]);
+  });
+  ['#menubar', '#tab-run'].forEach(sel => $(sel).addEventListener('click', e => { const b = e.target.closest('[data-open]'); if (b) openThing(b.dataset.open); }));
+  $('#menuBtn').addEventListener('click', () => { const m = $('#menu'); m.hidden = !m.hidden; $('#menuBtn').setAttribute('aria-expanded', String(!m.hidden)); });
+  document.addEventListener('click', e => { if (!$('#menu').hidden && (e.composedPath ? e.composedPath() : []).indexOf($('#menubar')) < 0) closeMenu(); });
+  document.addEventListener('keydown', e => { if (e.key !== 'Escape') return; if (!$('#menu').hidden) closeMenu(); else if (!$('#pop').hidden) closePop(); });
+  $('#popClose').addEventListener('click', closePop);
+  $('#pop').addEventListener('click', e => { if (e.target === $('#pop')) closePop(); });
+  ['bang', 'trung'].forEach(k => {   // nhớ phần nào đang mở
+    const d = $('#tab-' + k); try { d.open = localStorage.getItem('xg-open-' + k) === '1'; } catch (e) {}
+    d.addEventListener('toggle', () => { try { localStorage.setItem('xg-open-' + k, d.open ? '1' : '0'); } catch (e) {} if (d.open && k === 'bang') redraw(); });
+  });
+  $('#logMore').addEventListener('click', () => { const o = $('#log').classList.toggle('open'); $('#logMore').textContent = o ? 'Thu lại' : 'Xem hết'; $('#log').scrollTop = $('#log').scrollHeight; });
   $('#trungType').addEventListener('change', renderTrung); $('#tlMode').addEventListener('change', renderTL);
   $('#plan').addEventListener('change', e => { const v = e.target.dataset.pin; if (v == null) return; const id = tid(v); if (e.target.value) App.manual.set(id, e.target.value); else App.manual.delete(id); buildPlan(null); runCheck(true); });   // buildPlan tự lưu
   $('#plan').addEventListener('click', e => { const v = e.target.dataset.skip; if (v == null) return; const id = tid(v); if (App.skip.has(id)) App.skip.delete(id); else { App.skip.add(id); App.plan.delete(id); } savePlan(); renderAll(); });
@@ -1179,7 +1262,7 @@ function XepGioCore(H, $) {
     dirty();
   });
   $('#cfgCopy').addEventListener('click', () => { const el = $('#cfgText'); el.select(); const sel = () => { $('#cfgMsg').textContent = 'Đã bôi đen, bấm Ctrl+C để chép.'; }; try { navigator.clipboard.writeText(el.value).then(() => { $('#cfgMsg').textContent = 'Đã sao chép.'; }, sel); } catch (err) { sel(); } });
-  $('#cfgLoad').addEventListener('click', () => { try { const o = JSON.parse($('#cfgText').value); if (!o.staff || !o.shifts) throw 0; delete S.mayV; Object.assign(S, o); normMay(); S.staff.forEach(ensureStaff); $('#cfgMsg').textContent = 'Đã nạp cài đặt.'; autoBlocks(); dirty(); } catch (err) { $('#cfgMsg').textContent = 'Nội dung không phải file cài đặt hợp lệ.'; } });
+  $('#cfgLoad').addEventListener('click', () => { try { const o = JSON.parse($('#cfgText').value); if (!o.staff || !o.shifts) throw 0; delete S.mayV; S.setup = null; Object.assign(S, o); normMay(); if (!S.setup) S.setup = { staff: true, cert: true, svc: true, param: true }; S.staff.forEach(ensureStaff); $('#cfgMsg').textContent = 'Đã nạp cài đặt.'; autoBlocks(); dirty(); } catch (err) { $('#cfgMsg').textContent = 'Nội dung không phải file cài đặt hợp lệ.'; } });
   const tip = $('#tip');
   $('#tl').addEventListener('pointermove', e => { const b = e.target.closest('[data-tip]'); if (!b) { tip.hidden = true; return; } tip.textContent = b.dataset.tip; tip.hidden = false; tip.style.left = Math.min(e.clientX + 12, window.innerWidth - 330) + 'px'; tip.style.top = (e.clientY + 14) + 'px'; });
   $('#tl').addEventListener('pointerleave', () => { tip.hidden = true; });
@@ -1427,8 +1510,7 @@ function start(again) {
   core.log((again ? 'Đã tạo lại dữ liệu giả. ' : '') + `Đã tải danh sách ngày 17/11/2026 từ HIS mô phỏng: ${HIS.tickets.length} phiếu, ${Array.from(HIS.pats.values()).filter(p => p.vao != null).length} người bệnh mới vào trong ngày.`);
 }
 core = XepGioCore(H, $);
-let tab0 = 'run'; try { tab0 = localStorage.getItem('xg-tab') || 'run'; } catch (e) {}
 window.__sim = Object.assign({ HIS, H }, core);
-start(false); core.showTab(tab0);
+start(false); core.showTab('run');
 })();
 </script>

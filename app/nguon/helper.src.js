@@ -6,7 +6,7 @@ if (window.top !== window) return;                           // chỉ gắn ở 
 if (window.__xepgio) return;                                 // đã gắn rồi thì thôi
 const cfg0 = window.__xepgioCfg || {};
 if (cfg0.host && location.hostname !== cfg0.host) return;    // chỉ chạy trên đúng địa chỉ HIS đã khai
-window.__xepgio = { version: '0.24' };
+window.__xepgio = { version: '0.25' };
 
 /*@ENGINE*/
 /*@CORE*/
@@ -61,7 +61,7 @@ shadow.innerHTML = '<style>' + CSS + `
 [hidden] { display: none !important; }
 .xg { font-family: var(--font); font-size: 14px; line-height: 1.5; color: var(--ink); }
 .fab { position: fixed; right: 16px; bottom: 16px; z-index: 2147483000; padding: 8px 16px; border: 0; border-radius: 6px; background: var(--accent); color: var(--accent-ink); font-weight: 600; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
-.ov { position: fixed; top: 10px; right: 10px; bottom: 10px; width: min(820px, 50vw); min-width: 420px; max-width: calc(100vw - 20px); z-index: 2147483001; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 32px rgba(0,0,0,.35); display: flex; flex-direction: column; overflow: hidden; }
+.ov { transform: translate(0); position: fixed; top: 10px; right: 10px; bottom: 10px; width: min(820px, 50vw); min-width: 420px; max-width: calc(100vw - 20px); z-index: 2147483001; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 32px rgba(0,0,0,.35); display: flex; flex-direction: column; overflow: hidden; }
 .ov.full { left: 10px; width: auto; }
 .ov.mini { top: auto; width: 440px; min-width: 0; }
 .ov.mini .ovb, .ov.mini .ovh label, .ov.mini #xgLoad, .ov.mini #xgSize { display: none; }
