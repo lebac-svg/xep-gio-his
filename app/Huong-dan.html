@@ -26,7 +26,7 @@
 <body>
 <main>
   <h1>Hướng dẫn dùng app Xếp giờ HIS</h1>
-  <p class="muted">Bản 0.23, viết ngày 17/11/2026. Dùng cho màn Nội trú › Quản lý phẫu thuật thủ thuật của VNPT HIS.</p>
+  <p class="muted">Bản 0.24, viết ngày 17/11/2026. Dùng cho màn Nội trú › Quản lý phẫu thuật thủ thuật của VNPT HIS.</p>
   <div class="note">Lúc viết hướng dẫn này, việc bấm "Lưu đóng" thật trên HIS chưa được thử. Lần điền đầu tiên hãy chọn "Điền thử 1 ca" và tự kiểm tra phiếu đó trên HIS trước khi điền cả loạt.</div>
 
   <h2>Thư mục app gồm gì</h2>
@@ -47,7 +47,7 @@
     <li>Bấm nút <b class="k">Xếp giờ</b> ở góc phải dưới, chọn ngày, bấm <b class="k">Tải danh sách</b>. Bảng của app chiếm nửa phải màn hình; bấm <b class="k">Mở rộng</b> để xem toàn màn hình, <b class="k">Thu gọn</b> để chỉ còn một thanh nhỏ ở góc.</li>
     <li>Vào thẻ <b class="k">Cài đặt</b> và <b class="k">Chấm công</b> để xem lại: nhân viên và tài khoản HIS, ai có chứng chỉ gì, ưu tiên, thời gian thủ thuật, máy đang dùng. Bấm <b class="k">Lấy danh sách máy từ HIS</b> nếu thiếu máy, rồi tích những máy khoa thực sự dùng. Mỗi thủ thuật có hàng ô tích máy riêng; hai thủ thuật cùng tích một mã máy thì app không xếp hai ca trùng giờ trên máy đó.</li>
   </ol>
-  <p class="muted">Cài đặt được lưu trên chính máy đó. Muốn chuyển sang máy khác thì chép đoạn chữ ở mục "File cài đặt dùng chung" trong thẻ Cài đặt.</p>
+  <p class="muted">Cài đặt được lưu trên chính máy đó. Muốn chuyển sang máy khác thì chép đoạn chữ ở mục "Chuyển cài đặt sang máy khác" trong thẻ Cài đặt.</p>
 
   <h2>Tự cập nhật</h2>
   <ul>
@@ -62,13 +62,12 @@
   <h2>Mỗi ngày</h2>
   <ol>
     <li>Mở app, đăng nhập HIS, bấm <b class="k">Xếp giờ</b> rồi <b class="k">Tải danh sách</b> của ngày hôm đó.</li>
-    <li>Thẻ Chấm công: tích ai làm sáng, ai làm chiều.</li>
+    <li>Thẻ <b class="k">Chấm công</b>: tích ai làm sáng, ai làm chiều. Cũng ở thẻ này, thêm chặn giờ nếu cần: người bệnh đi chẩn đoán hình ảnh, người bệnh ra viện. Bác sĩ khám người bệnh mới được app tự chặn.</li>
     <li>Thẻ Chạy hằng ngày, Bước 1: nếu có phiếu xanh do sao phiếu, bấm <b class="k">Gỡ xanh</b> và xác nhận. Chỉ làm bước này trước khi cập nhật thủ thuật của ngày. Muốn chạy lại cả ngày sau khi app đã điền: bấm Gỡ xanh rồi chọn <b class="k">Chạy lại cả ngày</b>, sau đó Xếp giờ và Điền vào HIS lại từ đầu. Phiếu nào HIS không cho gỡ, và phiếu của người bệnh đã ra viện, được để nguyên.</li>
-    <li>Thêm chặn giờ nếu cần: người bệnh đi chẩn đoán hình ảnh, người bệnh ra viện. Bác sĩ khám người bệnh mới được app tự chặn.</li>
-    <li>Bước 2: bấm <b class="k">Xếp giờ</b>, xem Bảng giờ để duyệt. Ca báo đỏ có ghi lý do. Ca đã xanh trên HIS mà có lỗi (trùng người làm, người bệnh hoặc máy, sai buổi làm, người làm nghỉ hoặc không có chứng chỉ, thời gian ngắn hơn quy định) cũng được xếp giờ mới trong đúng buổi đã làm và hiện là "Xếp lại, sẽ ghi đè giờ cũ". Ca xanh không lỗi giữ nguyên, trừ khi còn ca kẹt vì hết chỗ: lúc đó app xem lại cả giờ của các ca đã xanh và chỉ dời những ca cần dời để lấy chỗ. Ca nào vẫn không xếp được thì hiện đỏ kèm lý do. Ca xanh của người bệnh đã ra viện cũng giữ nguyên dù có lỗi: app nhận biết theo trạng thái trên HIS, hoặc theo giờ chặn "Ra viện, xử trí" bạn thêm cho người đó. Ca xanh nào HIS không cho ghi lại thì app ghi vào nhật ký, giữ nguyên và chạy tiếp các ca khác.</li>
+    <li>Bước 2: bấm <b class="k">Xếp giờ</b>, rồi sang thẻ <b class="k">Bảng giờ</b> để duyệt. Ca báo đỏ có ghi lý do. Ca đã xanh trên HIS mà có lỗi (trùng người làm, người bệnh hoặc máy, sai buổi làm, người làm nghỉ hoặc không có chứng chỉ, thời gian ngắn hơn quy định) cũng được xếp giờ mới trong đúng buổi đã làm và hiện là "Xếp lại, sẽ ghi đè giờ cũ". Ca xanh không lỗi giữ nguyên, trừ khi còn ca kẹt vì hết chỗ: lúc đó app xem lại cả giờ của các ca đã xanh và chỉ dời những ca cần dời để lấy chỗ. Ca nào vẫn không xếp được thì hiện đỏ kèm lý do. Ca xanh của người bệnh đã ra viện cũng giữ nguyên dù có lỗi: app nhận biết theo trạng thái trên HIS, hoặc theo giờ chặn "Ra viện, xử trí" bạn thêm cho người đó. Ca xanh nào HIS không cho ghi lại thì app ghi vào nhật ký, giữ nguyên và chạy tiếp các ca khác.</li>
     <li>Bước 3: bấm <b class="k">Điền vào HIS</b> và xác nhận. App chỉ điền các ca đã qua giờ kết thúc.</li>
-    <li>Bước 4: bấm <b class="k">Kiểm tra trùng</b> để soát lại. Còn lỗi thì bấm <b class="k">Tự sắp xếp lại</b>, rồi bấm Điền vào HIS để ghi giờ mới.</li>
-    <li>Thẻ <b class="k">Danh sách</b>: xem mọi thủ thuật của ngày trong một bảng, tìm theo tên, lọc theo trạng thái, xếp theo người bệnh, giờ làm hoặc người làm. Thẻ này chỉ để xem, không tải file.</li>
+    <li>Xếp giờ xong app tự soát trùng; số lỗi hiện ở ô "Lỗi và cảnh báo trùng". Còn lỗi thì sang thẻ <b class="k">Lọc trùng</b>, bấm <b class="k">Tự sắp xếp lại</b>, rồi bấm Điền vào HIS để ghi giờ mới.</li>
+    <li>Thẻ <b class="k">Bảng giờ</b> là một bảng cho mọi thủ thuật của ngày. Chọn cách xem: theo giờ, theo người bệnh, theo người làm (có tổng số ca và số phút), hoặc thanh thời gian. Ô tìm và hai ô lọc dùng chung cho mọi cách xem. Các ô số liệu ở thẻ Chạy hằng ngày bấm được, dẫn thẳng tới đúng nhóm ca.</li>
   </ol>
 
   <h2>Buổi chiều và cuối tuần</h2>
@@ -77,7 +76,7 @@
     <li>Để yên thẻ của app. Làm việc HIS của bạn ở thẻ khác trong cùng cửa sổ (Ctrl+T). Tên thẻ của app hiện "Xếp giờ đang chạy, còn N ca".</li>
     <li>Đừng đăng nhập cùng tài khoản HIS ở máy khác trong lúc app chạy, vì HIS sẽ đẩy phiên ở máy này ra.</li>
     <li>Cuối tuần chỉ làm buổi sáng: xếp giờ, điền các ca sáng, để ô tự điền đang tích, thu nhỏ cửa sổ rồi về. Dặn người trực đừng đóng cửa sổ đó.</li>
-    <li>Người bệnh ra viện hoặc có chỉ định thêm: vào thẻ Chia giờ người bệnh, bấm <b class="k">Chạy riêng</b> ở dòng người đó.</li>
+    <li>Người bệnh ra viện hoặc có chỉ định thêm: vào thẻ Bảng giờ, chọn xem theo người bệnh, bấm <b class="k">Chạy riêng</b> ở dòng người đó.</li>
   </ul>
 
   <h2>Khi app dừng hoặc báo lỗi</h2>
