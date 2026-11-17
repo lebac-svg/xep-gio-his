@@ -6,7 +6,7 @@ if (window.top !== window) return;                           // chỉ gắn ở 
 if (window.__xepgio) return;                                 // đã gắn rồi thì thôi
 const cfg0 = window.__xepgioCfg || {};
 if (cfg0.host && location.hostname !== cfg0.host) return;    // chỉ chạy trên đúng địa chỉ HIS đã khai
-window.__xepgio = { version: '0.18' };
+window.__xepgio = { version: '0.19' };
 
 /*@ENGINE*/
 /*@CORE*/
@@ -351,6 +351,9 @@ async function loadDay() {
     const learned = learn(); core.persist(); core.renderAll();
     learned.forEach(m => core.log(m));
     core.log('Đã tải ngày ' + d + ': ' + list.length + ' phiếu, ' + tickets.length + ' thủ thuật của ' + pats.size + ' người bệnh; ' + Array.from(pats.values()).filter(p => p.vao != null).length + ' người bệnh mới vào trong ngày.');
+    const raN = Array.from(pats.values()).filter(p => p.ra).length, kinds = {};
+    pats.forEach(p => { const k = p.ttkb || 'trống'; kinds[k] = (kinds[k] || 0) + 1; });
+    core.log('Trạng thái người bệnh trên HIS: ' + Object.keys(kinds).map(k => '"' + k + '" ' + kinds[k] + ' người').join(', ') + '. ' + (raN ? raN + ' người đã ra viện: ca xanh của họ được giữ nguyên, không tự xếp lại.' : 'App không thấy ai đã ra viện.'));
     const none = tickets.filter(t => !core.groupOf(t.ten));
     if (none.length) core.log('Có ' + none.length + ' ca thuộc thủ thuật chưa có quy tắc thời gian: ' + Array.from(new Set(none.map(t => t.ten))).join('; '));
     core.runCheck();
@@ -376,6 +379,9 @@ async function loadMissed(date) {
     if (out.length) core.log('Có ' + out.length + ' thủ thuật của 7 ngày trước chưa được cập nhật, xem bảng Phiếu sót.');
   } catch (e) {}
 }
+// Người bệnh đã ra viện theo HIS: cột TRANGTHAIKHAMBENH của danh sách phiếu. Mã 9, hoặc chữ "kết thúc", "ra viện" được coi là đã ra viện.
+const ttkbOf = v => String(v == null ? '' : v).replace(/<[^>]*>/g, '').trim();
+const raVien = v => { const x = fold(ttkbOf(v)); return x === '9' || /ket thuc|ra vien|da ra/.test(x); };
 async function fetchDay(date) {
   {
     const base = gridBase(), d = vn(date);
@@ -389,7 +395,7 @@ async function fetchDay(date) {
         try {
           const det = await query(base, 'NT.024.3.VS2', { MAUBENHPHAMID: String(tk.MAUBENHPHAMID), TRANGTHAI_CBOPHIEU: '' }, 100);
           const bn = String(tk.BENHNHANID);
-          if (!pats.has(bn)) { const v = tk.THOIGIANVAOVIEN || ''; pats.set(bn, { bn, ten: tk.TENBENHNHAN, maBA: tk.MABENHAN, bsId: tk.NGUOITAO || null, vao: v.slice(0, 10) === d ? timeOf(v) : null }); }
+          if (!pats.has(bn)) { const v = tk.THOIGIANVAOVIEN || ''; pats.set(bn, { bn, ten: tk.TENBENHNHAN, maBA: tk.MABENHAN, bsId: tk.NGUOITAO || null, vao: v.slice(0, 10) === d ? timeOf(v) : null, ra: raVien(tk.TRANGTHAIKHAMBENH), ttkb: ttkbOf(tk.TRANGTHAIKHAMBENH) }); }
           det.forEach(x => {
             let s = timeOf(x.NGAYPHAUTHUATTHUTHUAT), e = timeOf(x.KETTHUCPTTT);
             if (s == null || e == null || e <= s) { s = null; e = null; }
