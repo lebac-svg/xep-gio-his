@@ -26,7 +26,7 @@
 <body>
 <main>
   <h1>Hướng dẫn dùng app Xếp giờ HIS</h1>
-  <p class="muted">Bản 0.26, viết ngày 17/11/2026. Dùng cho màn Nội trú › Quản lý phẫu thuật thủ thuật của VNPT HIS.</p>
+  <p class="muted">Bản 0.27, viết ngày 17/11/2026. Dùng cho màn Nội trú › Quản lý phẫu thuật thủ thuật của VNPT HIS.</p>
   <div class="note">Lúc viết hướng dẫn này, việc bấm "Lưu đóng" thật trên HIS chưa được thử. Lần điền đầu tiên hãy chọn "Điền thử 1 ca" và tự kiểm tra phiếu đó trên HIS trước khi điền cả loạt.</div>
 
   <h2>Thư mục app gồm gì</h2>
@@ -62,7 +62,7 @@
   <h2>Mỗi ngày</h2>
   <ol>
     <li>Mở app, đăng nhập HIS, bấm <b class="k">Xếp giờ</b> rồi <b class="k">Tải danh sách</b> của ngày hôm đó.</li>
-    <li>Bấm <b class="k">Chấm công</b> ở thanh trên cùng: một bảng nổi lên, tích ai làm sáng, ai làm chiều rồi bấm Xong. Bấm <b class="k">Chặn giờ</b> để thêm chặn nếu cần: người bệnh đi chẩn đoán hình ảnh, người bệnh ra viện. Bác sĩ khám người bệnh mới được app tự chặn. Việc lặp lại hằng tuần của nhiều người (giao ban, họp khoa, đi buồng) thì đặt một lần trong menu <b class="k">Chức năng</b>, mục <b class="k">Chặn giờ cố định theo tuần</b>: đặt tên việc, giờ, tích các thứ trong tuần và tích những người tham gia. Đến đúng thứ đó app tự chặn, dòng chặn có chữ "hằng tuần"; hôm nào không áp dụng thì bấm "Bỏ hôm nay" ở dòng ấy.</li>
+    <li>Bấm <b class="k">Chấm công</b> ở thanh trên cùng: một bảng nổi lên, tích ai làm sáng, ai làm chiều rồi bấm Xong. Bấm <b class="k">Chặn giờ</b> để thêm chặn nếu cần: người bệnh đi chẩn đoán hình ảnh, người bệnh ra viện. Bác sĩ khám người bệnh mới được app tự chặn. Giờ bận cố định hằng tuần của từng người (giao ban, đi buồng, họp) thì đặt một lần trong menu <b class="k">Chức năng</b>, mục <b class="k">Chặn giờ cố định theo tuần</b>: bảng hiện danh sách nhân viên, gõ giờ chặn vào ô của từng người theo dạng 07:30-08:30, nhiều khoảng thì ngăn bằng dấu |, ví dụ 07:30-08:30|13:00-14:00. Ô "Điền nhanh" điền cùng một giờ cho cả khoa hoặc cả một nhóm. Trong cửa sổ Chặn giờ của ngày, các giờ này hiện thành dòng có chữ "hằng tuần"; hôm nào không áp dụng thì bấm "Bỏ hôm nay" ở dòng ấy.</li>
     <li>Bước 1: nếu có phiếu xanh do sao phiếu, bấm <b class="k">Gỡ xanh</b> và xác nhận. Chỉ làm bước này trước khi cập nhật thủ thuật của ngày. Muốn chạy lại cả ngày sau khi app đã điền: bấm Gỡ xanh rồi chọn <b class="k">Chạy lại cả ngày</b>, sau đó Xếp giờ và Điền vào HIS lại từ đầu. Phiếu nào HIS không cho gỡ, và phiếu của người bệnh đã ra viện, được để nguyên.</li>
     <li>Bước 2: bấm <b class="k">Xếp giờ</b>, rồi bấm vào ô "Dự kiến, chờ điền" để mở <b class="k">Bảng giờ</b> ngay bên dưới và duyệt. Ca báo đỏ có ghi lý do. Ca đã xanh trên HIS mà có lỗi (trùng người làm, người bệnh hoặc máy, sai buổi làm, người làm nghỉ hoặc không có chứng chỉ, thời gian ngắn hơn quy định) cũng được xếp giờ mới trong đúng buổi đã làm và hiện là "Xếp lại, sẽ ghi đè giờ cũ". Ca xanh không lỗi giữ nguyên, trừ khi còn ca kẹt vì hết chỗ: lúc đó app xem lại cả giờ của các ca đã xanh và chỉ dời những ca cần dời để lấy chỗ. Ca nào vẫn không xếp được thì hiện đỏ kèm lý do. Ca xanh của người bệnh đã ra viện cũng giữ nguyên dù có lỗi: app nhận biết theo trạng thái trên HIS, hoặc theo giờ chặn "Ra viện, xử trí" bạn thêm cho người đó. Ca xanh nào HIS không cho ghi lại thì app ghi vào nhật ký, giữ nguyên và chạy tiếp các ca khác.</li>
     <li>Bước 3: bấm <b class="k">Điền vào HIS</b> và xác nhận. App chỉ điền các ca đã qua giờ kết thúc.</li>

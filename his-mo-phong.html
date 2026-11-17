@@ -109,9 +109,7 @@ td .sub { color: var(--muted); font-size: 12px; margin-left: 6px; }
 .pill.info { background: var(--info-bg); color: var(--info-ink); }
 .his .pill { border: 1px solid currentColor; }
 .tag button { border: 0; background: none; padding: 0 0 0 4px; font-size: 13px; line-height: 1; color: var(--do-ink); }
-.wk { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.wk .who { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; }
-.wk label.ck { display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
+label.ck { display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
 tr.off td { color: var(--muted); }
 .tag { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; background: var(--surface); }
 .sticky1 td:first-child, .sticky1 th:first-child { position: sticky; left: 0; background: var(--surface); z-index: 1; }
@@ -321,11 +319,11 @@ summary { cursor: pointer; color: var(--accent); font-weight: 500; }
             </div>
           </div>
           <div class="sec" data-pop="wk">
-            <p class="muted">Việc lặp lại hằng tuần của nhiều người, ví dụ giao ban, họp khoa, đi buồng. Đặt một lần ở đây; đến đúng thứ đã tích, app tự chặn giờ của những người được tích và không xếp thủ thuật cho họ trong giờ đó. Hôm nào không áp dụng thì vào Chặn giờ trong ngày, bấm "Bỏ hôm nay".</p>
-            <div class="col gap8" id="wkList"></div>
-            <div class="row"><button id="wkAdd" type="button">Thêm việc cố định</button><button type="button" class="small" data-open="bk">Xem chặn giờ của ngày đang chạy</button></div>
-            <details class="fold" id="wkWeekBox"><summary>Xem cả tuần theo từng người</summary><div class="in">
-              <div class="scroll tall"><table id="wkWeek" class="sticky1"></table></div></div></details>
+            <p class="muted">Giờ bận cố định của từng người, lặp lại mỗi tuần (giao ban, đi buồng, họp). Gõ theo dạng 07:30-08:30; nhiều khoảng thì ngăn bằng dấu |, ví dụ 07:30-08:30|13:00-14:00. Để trống là không chặn. App không xếp thủ thuật cho người đó trong các giờ này.</p>
+            <div class="row" id="wkDays"></div>
+            <div class="row"><label for="wkFill">Điền nhanh <input type="text" id="wkFill" size="24" placeholder="07:30-08:30|13:00-14:00"></label><label for="wkFillWho">cho <select id="wkFillWho"></select></label><button type="button" id="wkFillGo">Điền</button><span class="muted" id="wkMsg"></span></div>
+            <div class="scroll tall"><table id="wkTable"></table></div>
+            <div class="row"><button type="button" class="small" data-open="bk">Xem chặn giờ của ngày đang chạy</button></div>
           </div>
         </div>
         <div class="sec" data-pop="sot"><div class="scroll tall"><table id="sotTable"></table></div></div>
@@ -610,7 +608,7 @@ function XepGioCore(H, $) {
   }
   function defaults() {
     const seed = H.seed();
-    Object.assign(S, { staff: seed.staff, groups: JSON.parse(JSON.stringify(seed.groups)), certs: JSON.parse(JSON.stringify(seed.certs)), may: JSON.parse(JSON.stringify(seed.may || {})), stamp: '', shifts: [[450, 720], [780, 990]], lead: 5, gapPerf: 1, gapBn: 5, gapMay: 1, tol: 15, newBlock: 10, spread: true, mayOff: [], mayV: 0, setup: null, wkBlocks: [], wkSeq: 0 });
+    Object.assign(S, { staff: seed.staff, groups: JSON.parse(JSON.stringify(seed.groups)), certs: JSON.parse(JSON.stringify(seed.certs)), may: JSON.parse(JSON.stringify(seed.may || {})), stamp: '', shifts: [[450, 720], [780, 990]], lead: 5, gapPerf: 1, gapBn: 5, gapMay: 1, tol: 15, newBlock: 10, spread: true, mayOff: [], mayV: 0, setup: null, wkTime: {}, wkDays: [true, true, true, true, true, true, true] });
     D.on = seed.on || {}; D.note = {}; D.week = seed.week || {}; D.blocks = []; D.bkSeq = 0; D.wkOff = [];
     const saved = H.loadSettings ? H.loadSettings() : null;
     if (saved && saved.S) Object.assign(S, saved.S);
@@ -654,22 +652,42 @@ function XepGioCore(H, $) {
     const n = Array.from(App.plan.values()).filter(r => r.status === 'planned').length;
     if (n) log('Đã lấy lại bảng giờ xếp từ trước: ' + n + ' ca dự kiến chưa điền.');
   }
-  // Chặn giờ cố định theo tuần: một việc lặp lại (giao ban, họp khoa...) chặn nhiều nhân viên cùng lúc vào những thứ đã tích. Lưu trong cài đặt chung.
+  // Chặn giờ cố định theo tuần: mỗi nhân viên một ô giờ chặn (07:30-08:30|13:00-14:00), áp dụng vào những thứ đã tích. Lưu trong cài đặt chung.
   const DOW = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật'];
+  function wkParse(txt) {   // -> { list: [[từ, đến]...] tính bằng phút, bad: số khoảng gõ sai }
+    const list = []; let bad = 0;
+    String(txt || '').split(/[|,;\n]+/).forEach(p => {
+      p = p.trim(); if (!p) return;
+      const m = /^(\d{1,2})(?:\s*[:hH.]\s*(\d{1,2})?)?\s*[-–—]\s*(\d{1,2})(?:\s*[:hH.]\s*(\d{1,2})?)?$/.exec(p);
+      if (!m) { bad++; return; }
+      const a = +m[1] * 60 + (+m[2] || 0), b = +m[3] * 60 + (+m[4] || 0);
+      if ((+m[2] || 0) > 59 || (+m[4] || 0) > 59 || b <= a || b > 1440) { bad++; return; }
+      if (!list.some(x => x[0] === a && x[1] === b)) list.push([a, b]);
+    });
+    list.sort((x, y) => x[0] - y[0] || x[1] - y[1]);
+    return { list, bad };
+  }
+  const wkText = list => list.map(x => hm(x[0]) + '-' + hm(x[1])).join('|');
   function normWk() {
-    if (!Array.isArray(S.wkBlocks)) S.wkBlocks = [];
-    S.wkBlocks = S.wkBlocks.filter(r => r && r.id != null).map(r => ({ id: +r.id, ten: String(r.ten || ''), s: r.s == null ? null : +r.s, e: r.e == null ? null : +r.e, days: DOW.map((d, i) => !!(r.days && r.days[i])), who: Array.isArray(r.who) ? r.who.slice() : [] }));
-    S.wkSeq = S.wkBlocks.reduce((m, r) => Math.max(m, r.id), +S.wkSeq || 0);
-    if (!Array.isArray(D.wkOff)) D.wkOff = [];
+    if (!S.wkTime || typeof S.wkTime !== 'object' || Array.isArray(S.wkTime)) S.wkTime = {};
+    if (!Array.isArray(S.wkDays) || S.wkDays.length !== 7) S.wkDays = [true, true, true, true, true, true, true];
+    if (Array.isArray(S.wkBlocks)) S.wkBlocks.forEach(r => {   // bản 0.26 lưu theo từng việc: chuyển sang giờ chặn của từng người
+      if (!r || r.s == null || r.e == null || !(+r.e > +r.s)) return;
+      (r.who || []).forEach(id => { const p = wkParse(S.wkTime[id]); if (p.bad) return; S.wkTime[id] = wkText(wkParse(wkText(p.list.concat([[+r.s, +r.e]]))).list); });
+    });
+    delete S.wkBlocks; delete S.wkSeq;
+    D.wkOff = (Array.isArray(D.wkOff) ? D.wkOff : []).filter(k => typeof k === 'string');
   }
   const wkIdx = () => { const d = new Date(String(H.runDate) + 'T00:00:00'); return isNaN(d) ? -1 : (d.getDay() + 6) % 7; };   // 0 = thứ 2 ... 6 = chủ nhật
-  const wkWho = r => r.who.filter(id => staffById(id));
-  const wkOk = r => r.s != null && r.e != null && r.e > r.s && wkWho(r).length > 0;
-  const wkToday = () => { const i = wkIdx(); return (S.wkBlocks || []).filter(r => wkOk(r) && r.days[i]); };
-  const wkOn = r => (D.wkOff || []).indexOf(r.id) < 0;   // hôm nay có áp dụng không
-  const wkName = r => r.ten || 'Việc cố định theo tuần';
+  function wkToday() {   // các khoảng chặn cố định của ngày chạy, gom những người cùng giờ: [{ key, s, e, who }]
+    if (!S.wkDays || !S.wkDays[wkIdx()]) return [];
+    const map = new Map();
+    S.staff.forEach(st => wkParse(S.wkTime[st.id]).list.forEach(x => { const key = x[0] + '-' + x[1]; if (!map.has(key)) map.set(key, { key, s: x[0], e: x[1], who: [] }); map.get(key).who.push(st.id); }));
+    return Array.from(map.values()).sort((a, b) => a.s - b.s || a.e - b.e);
+  }
+  const wkOn = g => (D.wkOff || []).indexOf(g.key) < 0;   // hôm nay có áp dụng không
   const blocksEng = () => D.blocks.map(b => ({ kind: b.kind === 'perf' ? 'perf' : 'bn', who: b.who, s: b.s, e: b.kind === 'rv' ? 1440 : b.e, note: b.note }))
-    .concat(wkToday().filter(wkOn).reduce((a, r) => a.concat(wkWho(r).map(id => ({ kind: 'perf', who: id, s: r.s, e: r.e, note: wkName(r) + ' (hằng tuần)' }))), []));
+    .concat(wkToday().filter(wkOn).reduce((a, g) => a.concat(g.who.map(id => ({ kind: 'perf', who: id, s: g.s, e: g.e, note: 'Giờ chặn cố định theo tuần' }))), []));
   function autoBlocks() {   // người bệnh vào viện trong ngày: chặn bác sĩ chỉ định của người đó
     D.blocks = D.blocks.filter(b => !b.auto);
     H.pats.forEach(p => { if (p.vao != null && p.bsId) D.blocks.push({ id: ++D.bkSeq, kind: 'perf', who: p.bsId, s: p.vao, e: p.vao + S.newBlock, note: 'Khám ' + p.ten + ' mới vào lúc ' + hm(p.vao), auto: true }); });
@@ -948,7 +966,7 @@ function XepGioCore(H, $) {
     const kindName = b => b.auto ? 'Bác sĩ khám người bệnh mới' : b.kind === 'perf' ? 'Chặn người làm' : b.kind === 'rv' ? 'Ra viện, xử trí' : 'Chặn người bệnh';
     const wk = wkToday();
     $('#blocks').innerHTML = '<thead><tr><th>Loại</th><th>Ai</th><th>Từ</th><th>Đến</th><th></th></tr></thead><tbody>' +
-      wk.map(r => { const on = wkOn(r), who = wkWho(r); return `<tr${on ? '' : ' class="off"'}><td>Chặn người làm <span class="tag">hằng tuần</span></td><td class="wrapcell" title="${esc(who.map(staffName).join(', '))}">${esc(wkName(r))} · ${who.length} người${on ? '' : ' · hôm nay không áp dụng'}</td><td>${hm(r.s)}</td><td>${hm(r.e)}</td><td><button type="button" class="small" data-wkoff="${r.id}">${on ? 'Bỏ hôm nay' : 'Dùng lại'}</button></td></tr>`; }).join('') +
+      wk.map(g => { const on = wkOn(g), names = g.who.map(staffName).join(', '); return `<tr${on ? '' : ' class="off"'}><td>Chặn người làm <span class="tag">hằng tuần</span></td><td class="wrapcell">${esc(g.who.length > 2 ? g.who.length + ' người: ' + names : names)}${on ? '' : ' · hôm nay không áp dụng'}</td><td>${hm(g.s)}</td><td>${hm(g.e)}</td><td><button type="button" class="small" data-wkoff="${g.key}">${on ? 'Bỏ hôm nay' : 'Dùng lại'}</button></td></tr>`; }).join('') +
       (D.blocks.length ? D.blocks.slice().sort((a, b) => a.s - b.s).map(b => `<tr><td>${kindName(b)}${b.auto ? ' <span class="tag">tự động</span>' : ''}</td>` +
         `<td>${esc(b.kind === 'perf' ? staffName(b.who) : (H.pats.get(b.who) || {}).ten || b.who)}</td><td>${hm(b.s)}</td><td>${b.kind === 'rv' ? 'hết ngày' : hm(b.e)}</td><td><button type="button" class="small" data-delbk="${b.id}">Xóa</button></td></tr>`).join('')
         : wk.length ? '' : '<tr><td colspan="5" class="empty">Chưa có giờ chặn nào.</td></tr>') + '</tbody>';
@@ -1053,7 +1071,7 @@ function XepGioCore(H, $) {
       const st = staffById(d.delst); App.delAsk = null;
       S.staff = S.staff.filter(p => p.id !== d.delst); delete D.on[d.delst]; delete D.week[d.delst]; S.gone = (S.gone || []).concat([d.delst]);   // nhớ để không tự thêm lại
       D.blocks = D.blocks.filter(b => !(b.kind === 'perf' && b.who === d.delst && !b.auto));
-      S.wkBlocks.forEach(r => { r.who = r.who.filter(id => id !== d.delst); });
+      delete S.wkTime[d.delst];
       App.manual.forEach((v, k) => { if (v === d.delst) App.manual.delete(k); });
       App.stMsg = 'Đã xóa ' + (st ? st.ten : d.delst) + ' khỏi bảng nhân viên.'; dirty(); return true;
     }
@@ -1072,37 +1090,19 @@ function XepGioCore(H, $) {
       S.staff.map(st => `<tr><td>${esc(st.ten)}</td>` + days.map((d, i) => `<td><select id="wk_${eid(st.id)}_${i}" data-wk="${esc(st.id)}" data-d="${i}" aria-label="${esc(st.ten)} ngày ${esc(d)}">${LV.map((l, k) => `<option value="${k}"${D.week[st.id][i] === k ? ' selected' : ''}>${l}</option>`).join('')}</select></td>`).join('') + '</tr>').join('') + '</tbody>';
     renderMgr();
   }
-  function wkNote(r) {
-    const who = wkWho(r), ds = DOW.filter((d, i) => r.days[i]);
-    if (r.s == null || r.e == null || r.e <= r.s) return 'Chưa dùng được: giờ đến phải sau giờ từ.';
-    if (!who.length) return 'Chưa dùng được: chưa tích nhân viên nào.';
-    if (!ds.length) return 'Chưa dùng được: chưa tích ngày nào.';
-    return `Chặn ${who.length} người từ ${hm(r.s)} đến ${hm(r.e)}, vào ${ds.length === 7 ? 'mọi ngày trong tuần' : ds.join(', ').toLowerCase()}.` + (r.days[wkIdx()] ? (wkOn(r) ? ' Ngày đang chạy có áp dụng.' : ' Ngày đang chạy đã bấm bỏ.') : '');
-  }
-  function renderWkWeek() {
-    const ti = wkIdx(), rules = S.wkBlocks.filter(wkOk), sts = S.staff.filter(st => rules.some(r => r.who.indexOf(st.id) >= 0 && r.days.some(Boolean)));
-    $('#wkWeek').innerHTML = '<thead><tr><th>Họ tên</th>' + DOW.map((d, i) => `<th>${d}${i === ti ? ' (ngày chạy)' : ''}</th>`).join('') + '</tr></thead><tbody>' +
-      (sts.length ? sts.map(st => `<tr><td>${esc(st.ten)}</td>` + DOW.map((d, i) => { const rs = rules.filter(r => r.days[i] && r.who.indexOf(st.id) >= 0).sort((a, b) => a.s - b.s);
-        return `<td>${rs.length ? rs.map(r => `${hm(r.s)}–${hm(r.e)} ${esc(wkName(r))}`).join('<br>') : '<span class="muted">—</span>'}</td>`; }).join('') + '</tr>').join('')
-        : '<tr><td colspan="8" class="empty">Chưa có việc cố định nào dùng được.</td></tr>') + '</tbody>';
-  }
+  function wkState(st) { const p = wkParse(S.wkTime[st.id]); return p.bad ? 'Gõ chưa đúng dạng, phần sai chưa được dùng. Ví dụ đúng: 07:30-08:30' : p.list.length ? 'Chặn ' + p.list.reduce((n, x) => n + x[1] - x[0], 0) + ' phút mỗi ngày' : ''; }
   function renderWk() {
-    if (App.wkKeep) {   // vừa sửa ngay trong bảng: giữ nguyên các ô đang gõ, chỉ cập nhật dòng ghi chú
-      App.wkKeep = false; S.wkBlocks.forEach(r => { const el = $('#wkn_' + r.id); if (el) el.textContent = wkNote(r); }); renderWkWeek(); return;
+    if (App.wkKeep) {   // vừa sửa ngay trong bảng: giữ nguyên các ô đang gõ, chỉ cập nhật cột ghi chú
+      App.wkKeep = false; S.staff.forEach(st => { const el = $('#wkn_' + eid(st.id)); if (el) el.textContent = wkState(st); }); return;
     }
-    const nhoms = Array.from(new Set(S.staff.map(st => st.nhom).filter(Boolean)));
-    $('#wkList').innerHTML = S.wkBlocks.length ? S.wkBlocks.map(r => `<div class="wk" data-wkid="${r.id}">` +
-      `<div class="row"><input type="text" id="wkt_${r.id}" data-wkf="ten" value="${esc(r.ten)}" placeholder="Tên việc, ví dụ Giao ban" size="24" aria-label="Tên việc">` +
-      `<label for="wks_${r.id}">Từ <input type="time" id="wks_${r.id}" data-wkf="s" value="${r.s == null ? '' : hm(r.s)}"></label>` +
-      `<label for="wke_${r.id}">Đến <input type="time" id="wke_${r.id}" data-wkf="e" value="${r.e == null ? '' : hm(r.e)}"></label>` +
-      `<button type="button" class="small" data-wkdel="${r.id}">${App.delAsk === 'w:' + r.id ? 'Bấm lần nữa để xóa' : 'Xóa việc này'}</button></div>` +
-      `<div class="who"><span class="muted">Ngày:</span>` + DOW.map((d, i) => `<label class="ck" for="wkd_${r.id}_${i}"><input type="checkbox" id="wkd_${r.id}_${i}" data-wkd="${i}"${r.days[i] ? ' checked' : ''}> ${d}</label>`).join('') +
-      `<button type="button" class="small" data-wkset="d5">Thứ 2 đến thứ 6</button><button type="button" class="small" data-wkset="d7">Cả tuần</button></div>` +
-      `<div class="who"><span class="muted">Nhân viên:</span>` + (S.staff.length ? S.staff.map(st => `<label class="ck" for="wkw_${r.id}_${eid(st.id)}"><input type="checkbox" id="wkw_${r.id}_${eid(st.id)}" data-wkw="${esc(st.id)}"${r.who.indexOf(st.id) >= 0 ? ' checked' : ''}> ${esc(st.ten)}</label>`).join('') : '<span class="muted">chưa có nhân viên nào trong bảng nhân viên</span>') + '</div>' +
-      `<div class="row"><button type="button" class="small" data-wkset="all">Tích tất cả</button>` + (nhoms.length > 1 ? nhoms.map((n, i) => `<button type="button" class="small" data-wkset="n${i}">Cả nhóm ${esc(n)}</button>`).join('') : '') + `<button type="button" class="small" data-wkset="none">Bỏ hết</button></div>` +
-      `<div class="muted" id="wkn_${r.id}">${esc(wkNote(r))}</div></div>`).join('')
-      : '<div class="empty">Chưa có việc cố định nào. Bấm Thêm việc cố định, đặt tên, giờ, tích ngày và tích những người tham gia.</div>';
-    renderWkWeek();
+    const ti = wkIdx(), nhoms = Array.from(new Set(S.staff.map(st => st.nhom).filter(Boolean))), cur = $('#wkFillWho').value;
+    $('#wkDays').innerHTML = '<span class="muted">Áp dụng vào:</span>' + DOW.map((d, i) => `<label class="ck" for="wkd_${i}"><input type="checkbox" id="wkd_${i}" data-wkd="${i}"${S.wkDays[i] ? ' checked' : ''}> ${d}${i === ti ? ' (ngày chạy)' : ''}</label>`).join('');
+    $('#wkFillWho').innerHTML = '<option value="">tất cả nhân viên</option><option value="-">những người đang để trống</option>' + nhoms.map((n, i) => `<option value="n${i}">nhóm ${esc(n)}</option>`).join('');
+    if (Array.from($('#wkFillWho').options).some(o => o.value === cur)) $('#wkFillWho').value = cur;
+    $('#wkTable').innerHTML = '<thead><tr><th>Họ tên</th><th>Tên đăng nhập HIS</th><th>Nhóm</th><th>Giờ chặn</th><th></th></tr></thead><tbody>' +
+      (S.staff.length ? S.staff.map(st => { const k = eid(st.id); return `<tr><td>${esc(st.ten)}</td><td>${esc(st.user || 'chưa có')}</td><td>${esc(st.nhom || '')}</td>` +
+        `<td><input type="text" id="wkt_${k}" data-wkt="${esc(st.id)}" value="${esc(S.wkTime[st.id] || '')}" size="26" placeholder="để trống là không chặn" aria-label="Giờ chặn của ${esc(st.ten)}"></td><td class="muted" id="wkn_${k}">${esc(wkState(st))}</td></tr>`; }).join('')
+        : '<tr><td colspan="5" class="empty">Chưa có nhân viên nào. Thêm nhân viên ở menu Chức năng, mục Nhân viên.</td></tr>') + '</tbody>';
   }
   const touch = () => { const d = new Date(), p = n => String(n).padStart(2, '0'); S.stamp = p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()); };
   const initials = s => fold(s).split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || 'TT';
@@ -1277,31 +1277,20 @@ function XepGioCore(H, $) {
   $('#trungType').addEventListener('change', renderTrung); $('#tlMode').addEventListener('change', renderTL);
   $('#plan').addEventListener('change', e => { const v = e.target.dataset.pin; if (v == null) return; const id = tid(v); if (e.target.value) App.manual.set(id, e.target.value); else App.manual.delete(id); buildPlan(null); runCheck(true); });   // buildPlan tự lưu
   $('#plan').addEventListener('click', e => { const v = e.target.dataset.skip; if (v == null) return; const id = tid(v); if (App.skip.has(id)) App.skip.delete(id); else { App.skip.add(id); App.plan.delete(id); } savePlan(); renderAll(); });
-  const wkOf = el => { const c = el.closest('[data-wkid]'); return c ? S.wkBlocks.find(r => r.id === +c.dataset.wkid) : null; };
-  $('#wkAdd').addEventListener('click', () => { const a = S.shifts[0][0]; S.wkBlocks.push({ id: ++S.wkSeq, ten: '', s: a, e: a + 30, days: [true, true, true, true, true, false, false], who: [] }); App.delAsk = null; dirty(); const el = $('#wkt_' + S.wkSeq); if (el) el.focus(); });
-  $('#wkList').addEventListener('change', e => {
-    const r = wkOf(e.target), d = e.target.dataset; if (!r) return;
-    if (d.wkf === 'ten') r.ten = e.target.value.trim();
-    else if (d.wkf === 's' || d.wkf === 'e') r[d.wkf] = X.toMin(e.target.value);
-    else if (d.wkd != null) r.days[+d.wkd] = e.target.checked;
-    else if (d.wkw != null) { r.who = r.who.filter(id => id !== d.wkw); if (e.target.checked) r.who.push(d.wkw); }
-    else return;
-    App.wkKeep = true; dirty();
+  $('#wkTable').addEventListener('change', e => {
+    const id = e.target.dataset.wkt; if (id == null) return;
+    const p = wkParse(e.target.value), txt = p.bad ? e.target.value.trim() : wkText(p.list);   // gõ đúng thì viết lại cho gọn; gõ sai thì giữ nguyên để sửa
+    if (txt) S.wkTime[id] = txt; else delete S.wkTime[id];
+    e.target.value = txt; App.wkKeep = true; dirty();
   });
-  $('#wkList').addEventListener('click', e => {
-    const d = e.target.dataset, r = wkOf(e.target); if (!r) return;
-    if (d.wkdel != null) {
-      if (App.delAsk !== 'w:' + r.id) { App.delAsk = 'w:' + r.id; renderWk(); return; }
-      App.delAsk = null; S.wkBlocks = S.wkBlocks.filter(x => x !== r); D.wkOff = D.wkOff.filter(id => id !== r.id); dirty(); return;
-    }
-    if (d.wkset == null) return;
-    const k = d.wkset, nhoms = Array.from(new Set(S.staff.map(st => st.nhom).filter(Boolean)));
-    if (k === 'd5') r.days = [true, true, true, true, true, false, false];
-    else if (k === 'd7') r.days = [true, true, true, true, true, true, true];
-    else if (k === 'all') r.who = S.staff.map(st => st.id);
-    else if (k === 'none') r.who = [];
-    else if (k[0] === 'n') { const n = nhoms[+k.slice(1)]; S.staff.forEach(st => { if (st.nhom === n && r.who.indexOf(st.id) < 0) r.who.push(st.id); }); }
-    App.delAsk = null; dirty();
+  $('#wkDays').addEventListener('change', e => { const i = e.target.dataset.wkd; if (i == null) return; S.wkDays[+i] = e.target.checked; App.wkKeep = true; dirty(); });
+  $('#wkFillGo').addEventListener('click', () => {
+    const p = wkParse($('#wkFill').value), k = $('#wkFillWho').value, nhoms = Array.from(new Set(S.staff.map(st => st.nhom).filter(Boolean)));
+    if (p.bad) { $('#wkMsg').textContent = 'Giờ gõ chưa đúng dạng. Ví dụ đúng: 07:30-08:30|13:00-14:00'; return; }
+    if (!p.list.length) { $('#wkMsg').textContent = 'Chưa gõ giờ. Muốn bỏ chặn thì xóa trắng ô của từng người.'; return; }
+    const txt = wkText(p.list); let n = 0;
+    S.staff.forEach(st => { if (k === '-' ? S.wkTime[st.id] : k && st.nhom !== nhoms[+k.slice(1)]) return; S.wkTime[st.id] = txt; n++; });
+    $('#wkMsg').textContent = `Đã điền ${txt} cho ${n} người.`; dirty();
   });
   $('#bkKind').addEventListener('change', renderBlocks);
   $('#bkAdd').addEventListener('click', () => {
@@ -1313,7 +1302,7 @@ function XepGioCore(H, $) {
   });
   $('#blocks').addEventListener('click', e => {
     const w = e.target.dataset.wkoff;
-    if (w) { const id = +w; D.wkOff = wkOn({ id }) ? D.wkOff.concat([id]) : D.wkOff.filter(x => x !== id); dirty(); return; }
+    if (w) { D.wkOff = wkOn({ key: w }) ? D.wkOff.concat([w]) : D.wkOff.filter(x => x !== w); dirty(); return; }
     const id = e.target.dataset.delbk; if (!id) return; D.blocks = D.blocks.filter(b => b.id !== +id); dirty();
   });
   $('#plan').addEventListener('change', e => { const b = e.target.dataset.selbn; if (!b) return; if (e.target.checked) App.sel.add(b); else App.sel.delete(b); });
@@ -1600,7 +1589,7 @@ function start(again) {
   HIS.now = X.toMin($('#nowInput').value) || 725;
   genData(); core.boot(false);
   core.D.blocks.push({ id: ++core.D.bkSeq, kind: 'bn', who: 'bn3', s: 480, e: 490, note: 'Chụp X-quang (dòng ví dụ)', auto: false });
-  core.S.wkBlocks = [{ id: 1, ten: 'Giao ban (dòng ví dụ)', s: 450, e: 465, days: [true, true, true, true, true, false, false], who: core.S.staff.slice(0, 4).map(p => p.id) }]; core.S.wkSeq = 1;
+  core.S.staff.slice(0, 4).forEach(p => { core.S.wkTime[p.id] = '07:30-07:45'; });   // ví dụ giờ chặn cố định
   renderHis(); core.renderAll();
   core.log((again ? 'Đã tạo lại dữ liệu giả. ' : '') + `Đã tải danh sách ngày 17/11/2026 từ HIS mô phỏng: ${HIS.tickets.length} phiếu, ${Array.from(HIS.pats.values()).filter(p => p.vao != null).length} người bệnh mới vào trong ngày.`);
 }
