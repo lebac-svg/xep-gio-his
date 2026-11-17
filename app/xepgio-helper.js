@@ -6,7 +6,7 @@ if (window.top !== window) return;                           // chỉ gắn ở 
 if (window.__xepgio) return;                                 // đã gắn rồi thì thôi
 const cfg0 = window.__xepgioCfg || {};
 if (cfg0.host && location.hostname !== cfg0.host) return;    // chỉ chạy trên đúng địa chỉ HIS đã khai
-window.__xepgio = { version: '0.21' };
+window.__xepgio = { version: '0.22' };
 
 const X = (function () {
   const toMin = s => { const m = /(\d{1,2}):(\d{2})/.exec(s || ''); return m ? +m[1] * 60 + +m[2] : null; };
@@ -176,7 +176,15 @@ function XepGioCore(H, $) {
   // Một dịch vụ trên HIS thuộc thủ thuật nào là do từ khóa (kw): lấy thủ thuật có từ khóa dài nhất nằm trong tên dịch vụ, không phân biệt dấu.
   let WORK = [];
   const groupOf = name => { const n = fold(name); let best = null, len = 0; S.groups.forEach(g => (g.kw || []).forEach(k => { const x = fold(k).trim(); if (x && x.length > len && n.indexOf(x) >= 0) { best = g; len = x.length; } })); return best; };
-  const mayList = g => { const a = S.may[g.mk || g.k]; return a && a.length ? a : null; };
+  const mayList = g => { const a = S.may[g.k]; return a && a.length ? a : null; };
+  const offKey = (g, m) => g.k + '|' + m;   // ô tích máy là của riêng từng thủ thuật
+  // Cài đặt kiểu cũ: vài thủ thuật dùng chung một danh sách máy (mk) và ô tích là chung theo mã máy. Chuyển sang kiểu mới, giữ nguyên máy nào đang tích.
+  function normMay() {
+    S.may = S.may || {}; S.mayOff = S.mayOff || [];
+    S.groups.forEach(g => { if (g.mk && g.mk !== g.k && !(S.may[g.k] && S.may[g.k].length) && S.may[g.mk]) S.may[g.k] = S.may[g.mk].slice(); });
+    S.groups.forEach(g => { g.mk = g.k; });
+    if (S.mayV !== 2) { const old = S.mayOff; S.mayOff = []; S.groups.forEach(g => (S.may[g.k] || []).forEach(m => { if (old.indexOf(m) >= 0) S.mayOff.push(offKey(g, m)); })); S.mayV = 2; }
+  }
   // Thủ thuật đang dùng: có trong danh sách ngày, đã tích cho ai đó, hoặc do người dùng thêm
   function refreshWork() { const used = new Set(H.tickets.map(t => (groupOf(t.ten) || {}).k)); WORK = S.groups.filter(g => !g.skip && (g.pin || used.has(g.k) || S.staff.some(p => holds(p, g)))); }
 
@@ -197,10 +205,11 @@ function XepGioCore(H, $) {
   }
   function defaults() {
     const seed = H.seed();
-    Object.assign(S, { staff: seed.staff, groups: JSON.parse(JSON.stringify(seed.groups)), certs: JSON.parse(JSON.stringify(seed.certs)), may: JSON.parse(JSON.stringify(seed.may || {})), stamp: '', shifts: [[450, 720], [780, 990]], lead: 5, gapPerf: 1, gapBn: 5, gapMay: 1, tol: 15, newBlock: 10, spread: true, mayOff: [] });
+    Object.assign(S, { staff: seed.staff, groups: JSON.parse(JSON.stringify(seed.groups)), certs: JSON.parse(JSON.stringify(seed.certs)), may: JSON.parse(JSON.stringify(seed.may || {})), stamp: '', shifts: [[450, 720], [780, 990]], lead: 5, gapPerf: 1, gapBn: 5, gapMay: 1, tol: 15, newBlock: 10, spread: true, mayOff: [], mayV: 0 });
     D.on = seed.on || {}; D.note = {}; D.week = seed.week || {}; D.blocks = []; D.bkSeq = 0;
     const saved = H.loadSettings ? H.loadSettings() : null;
     if (saved && saved.S) Object.assign(S, saved.S);
+    normMay();
     if (saved && saved.D) Object.assign(D, saved.D);
     S.staff.forEach(ensureStaff);
   }
@@ -214,7 +223,7 @@ function XepGioCore(H, $) {
   const canDo = (st, g) => holds(st, g) && !expired(st, g.cert);
   const staffEng = () => S.staff.map(st => ({ id: st.id, on: (D.on[st.id] || [false, false]).slice(), can: Object.fromEntries(WORK.map(g => [g.k, canDo(st, g)])), prio: st.prio }));
   const cfg = () => ({ shifts: S.shifts, gapPerf: S.gapPerf, gapBn: S.gapBn, gapMay: S.gapMay, lead: S.lead, tol: S.tol, spread: S.spread });
-  const machinesOf = g => { const a = mayList(g); return a ? a.filter(m => S.mayOff.indexOf(m) < 0) : null; };
+  const machinesOf = g => { const a = mayList(g); return a ? a.filter(m => S.mayOff.indexOf(offKey(g, m)) < 0) : null; };
   const byId = id => H.tickets.find(t => t.id === id);
   // Người bệnh đã ra viện: theo trạng thái trên HIS, hoặc có giờ chặn "Ra viện, xử trí". Ca xanh của họ không được tự xếp lại.
   const outBn = bn => { const p = H.pats.get(bn); return !!(p && p.ra) || D.blocks.some(b => b.kind === 'rv' && b.who === bn); };
@@ -649,7 +658,6 @@ function XepGioCore(H, $) {
   }
   const touch = () => { const d = new Date(), p = n => String(n).padStart(2, '0'); S.stamp = p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()); };
   const initials = s => fold(s).split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || 'TT';
-  const sharedWith = g => S.groups.find(o => o !== g && !o.skip && (o.mk || o.k) === (g.mk || g.k) && S.groups.indexOf(o) < S.groups.indexOf(g));
   function renderCD() {
     const byCert = c => WORK.filter(g => g.cert === c.k);
     $('#certMgr').innerHTML = '<span class="muted">Loại chứng chỉ:</span>' + S.certs.map(c => `<span class="row" style="gap:4px"><input type="text" id="cnm_${c.k}" data-cname="${c.k}" value="${esc(c.label)}" size="18" aria-label="Tên chứng chỉ"><button type="button" class="small" data-delcert="${c.k}">${App.delAsk === 'c:' + c.k ? 'Bấm lần nữa để xóa' : 'Xóa'}</button></span>`).join('') +
@@ -667,24 +675,24 @@ function XepGioCore(H, $) {
     const certName = k => (S.certs.find(c => c.k === k) || {}).label || 'chưa gán';
     if (!App.svEdit) {
       $('#svcTable').innerHTML = '<thead><tr><th>Thủ thuật</th><th>Chứng chỉ</th><th>Thực hiện</th><th>Lưu, theo dõi</th><th>Tổng</th><th>Máy dùng được hôm nay</th></tr></thead><tbody>' +
-        (WORK.length ? WORK.map(g => { const sw = sharedWith(g), ml = mayList(g);
-          return `<tr><td>${esc(g.label)}</td><td>${esc(certName(g.cert))}</td><td>${g.busy} phút</td><td>${g.dur - g.busy ? g.dur - g.busy + ' phút' : '—'}</td><td>${g.dur} phút</td><td class="wrapcell">${sw && ml ? '<span class="muted">dùng chung máy với ' + esc(sw.label.toLowerCase()) + '</span>' : ml ? ml.map(m => `<label for="my_${eid(m)}"><input type="checkbox" id="my_${eid(m)}" data-may="${esc(m)}"${S.mayOff.indexOf(m) < 0 ? ' checked' : ''}> ${esc(m)}</label>`).join(' ') : '<span class="muted">không dùng máy</span>'}</td></tr>`; }).join('')
+        (WORK.length ? WORK.map(g => { const ml = mayList(g);
+          return `<tr><td>${esc(g.label)}</td><td>${esc(certName(g.cert))}</td><td>${g.busy} phút</td><td>${g.dur - g.busy ? g.dur - g.busy + ' phút' : '—'}</td><td>${g.dur} phút</td><td class="wrapcell">${ml ? ml.map(m => `<label for="my_${g.k}_${eid(m)}"><input type="checkbox" id="my_${g.k}_${eid(m)}" data-may="${esc(m)}" data-g="${g.k}"${S.mayOff.indexOf(offKey(g, m)) < 0 ? ' checked' : ''}> ${esc(m)}</label>`).join(' ') : '<span class="muted">không dùng máy</span>'}</td></tr>`; }).join('')
           : '<tr><td colspan="6" class="empty">Chưa có thủ thuật nào đang dùng. Bấm Cập nhật để xem và sửa toàn bộ danh sách.</td></tr>') + '</tbody>';
     } else {   // chế độ cập nhật: hiện toàn bộ thủ thuật, sửa được thời gian, chứng chỉ, từ khóa và mã máy
       $('#svcTable').innerHTML = '<thead><tr><th>Tên thủ thuật</th><th>Từ khóa trong tên dịch vụ HIS</th><th>Thực hiện (phút)</th><th>Tổng (phút)</th><th>Chứng chỉ</th><th>Mã máy</th><th></th></tr></thead><tbody>' +
-        S.groups.filter(g => !g.skip).map(g => { const sw = sharedWith(g), ml = mayList(g) || [];
+        S.groups.filter(g => !g.skip).map(g => { const ml = mayList(g) || [];
           return `<tr><td><input type="text" id="gl_${g.k}" data-ge="${g.k}" data-f="label" value="${esc(g.label)}" size="20" aria-label="Tên thủ thuật"></td>` +
             `<td><input type="text" id="gk_${g.k}" data-ge="${g.k}" data-f="kw" value="${esc((g.kw || []).join(', '))}" size="22" aria-label="Từ khóa của ${esc(g.label)}"></td>` +
             `<td><input type="number" id="gb_${g.k}" data-ge="${g.k}" data-f="busy" value="${g.busy}" min="1" max="240" aria-label="Phút thực hiện của ${esc(g.label)}"></td>` +
             `<td><input type="number" id="gd_${g.k}" data-ge="${g.k}" data-f="dur" value="${g.dur}" min="1" max="240" aria-label="Tổng phút của ${esc(g.label)}"></td>` +
             `<td><select id="gc_${g.k}" data-ge="${g.k}" data-f="cert" aria-label="Chứng chỉ của ${esc(g.label)}">${S.certs.map(c => `<option value="${c.k}"${c.k === g.cert ? ' selected' : ''}>${esc(c.label)}</option>`).join('')}</select></td>` +
-            `<td class="wrapcell">${sw ? '<span class="muted">dùng chung máy với ' + esc(sw.label.toLowerCase()) + '</span>' : ml.map(m => `<span class="tag">${esc(m)}<button type="button" data-delmay="${esc(m)}" data-g="${g.k}" aria-label="Bỏ máy ${esc(m)}">×</button></span>`).join(' ') + ` <input type="text" id="gm_${g.k}" data-addmay="${g.k}" placeholder="Thêm mã máy" size="14" aria-label="Thêm mã máy cho ${esc(g.label)}">`}</td>` +
+            `<td class="wrapcell">${ml.map(m => `<span class="tag">${esc(m)}<button type="button" data-delmay="${esc(m)}" data-g="${g.k}" aria-label="Bỏ máy ${esc(m)}">×</button></span>`).join(' ') + ` <input type="text" id="gm_${g.k}" data-addmay="${g.k}" placeholder="Thêm mã máy" size="14" aria-label="Thêm mã máy cho ${esc(g.label)}">`}</td>` +
             `<td><button type="button" class="small" data-delg="${g.k}">${App.delAsk === 'g:' + g.k ? 'Bấm lần nữa để xóa' : 'Xóa'}</button></td></tr>`; }).join('') + '</tbody>';
     }
     $('#svEdit').textContent = App.svEdit ? 'Xong' : 'Cập nhật'; $('#svFoot').hidden = !App.svEdit && !App.svMsg; $('#svAdd').hidden = !App.svEdit; $('#svMsg').textContent = App.svMsg || '';
     $('#mayFetch').hidden = !H.fetchMachines; $('#mayFetch').disabled = App.running || !H.tickets.length;
     $('#svStamp').textContent = S.stamp ? 'Cập nhật lần cuối: ' + S.stamp : '';
-    $('#svHelp').textContent = App.svEdit ? 'Sửa xong một ô thì bấm ra ngoài ô để ghi nhận. Thời gian lưu, theo dõi bằng tổng trừ thực hiện. Từ khóa là cụm chữ có trong tên dịch vụ trên HIS, cách nhau bằng dấu phẩy.' : 'Thời gian theo Phụ lục 1 của bệnh viện. Bỏ tích máy hỏng hoặc đang bảo trì. Bấm Cập nhật để sửa thời gian, thêm thủ thuật hoặc thêm bớt mã máy.';
+    $('#svHelp').textContent = App.svEdit ? 'Sửa xong một ô thì bấm ra ngoài ô để ghi nhận. Thời gian lưu, theo dõi bằng tổng trừ thực hiện. Từ khóa là cụm chữ có trong tên dịch vụ trên HIS, cách nhau bằng dấu phẩy.' : 'Thời gian theo Phụ lục 1 của bệnh viện. Mỗi thủ thuật có ô tích máy riêng: tích những máy thủ thuật đó được dùng, bỏ tích máy hỏng hoặc đang bảo trì. Bấm Cập nhật để sửa thời gian, thêm thủ thuật hoặc thêm bớt mã máy.';
     $('#pA0').value = hm(S.shifts[0][0]); $('#pA1').value = hm(S.shifts[0][1]); $('#pB0').value = hm(S.shifts[1][0]); $('#pB1').value = hm(S.shifts[1][1]);
     $('#pLead').value = S.lead; $('#pGapPerf').value = S.gapPerf; $('#pGapBn').value = S.gapBn; $('#pGapMay').value = S.gapMay; $('#pNew').value = S.newBlock; $('#pSpread').value = S.spread ? '1' : '0';
     $('#cfgText').value = JSON.stringify(S);
@@ -701,7 +709,7 @@ function XepGioCore(H, $) {
       else if (d.f === 'cert') g.cert = v;
       touch(); return true;
     }
-    if (d.addmay) { const g = S.groups.find(x => x.k === d.addmay), code = v.trim(); if (!g || !code) return false; const key = g.mk || g.k, a = S.may[key] = S.may[key] || []; if (a.indexOf(code) < 0) { a.push(code); a.sort(); } touch(); return true; }
+    if (d.addmay) { const g = S.groups.find(x => x.k === d.addmay), code = v.trim(); if (!g || !code) return false; const key = g.k, a = S.may[key] = S.may[key] || []; if (a.indexOf(code) < 0) { a.push(code); a.sort(); } touch(); return true; }
     if (d.cname) { const c = S.certs.find(x => x.k === d.cname); if (!c) return false; c.label = v.trim() || c.label; touch(); return true; }
     return false;
   }
@@ -710,7 +718,7 @@ function XepGioCore(H, $) {
     if (id === 'mayFetch') { runMayFetch(); return; }
     if (id === 'svEdit') { App.svEdit = !App.svEdit; App.delAsk = null; App.svMsg = ''; renderAll(); return; }
     if (id === 'svAdd') { const k = 'g' + Date.now().toString(36); S.groups.push({ k, code: 'TT', label: 'Thủ thuật mới', kw: [], dur: 15, busy: 5, cert: S.certs[0].k, pin: true, custom: true }); App.svMsg = 'Đã thêm một dòng ở cuối bảng. Điền tên, từ khóa và thời gian cho thủ thuật mới.'; touch(); dirty(); return; }
-    if (d.delmay != null) { const g = S.groups.find(x => x.k === d.g), key = g.mk || g.k; S.may[key] = (S.may[key] || []).filter(m => m !== d.delmay); S.mayOff = S.mayOff.filter(m => m !== d.delmay); touch(); dirty(); return; }
+    if (d.delmay != null) { const g = S.groups.find(x => x.k === d.g), key = g.k; S.may[key] = (S.may[key] || []).filter(m => m !== d.delmay); S.mayOff = S.mayOff.filter(m => m !== offKey(g, d.delmay)); touch(); dirty(); return; }
     if (d.delg != null) {
       if (App.delAsk !== 'g:' + d.delg) { App.delAsk = 'g:' + d.delg; renderCD(); return; }
       const g = S.groups.find(x => x.k === d.delg); App.delAsk = null;
@@ -738,12 +746,12 @@ function XepGioCore(H, $) {
   async function runMayFetch() {
     if (App.running || !H.fetchMachines) return;
     const probes = [], seen = new Set();
-    WORK.forEach(g => { const key = g.mk || g.k; if (seen.has(key)) return; const mine = workTickets().filter(x => (groupOf(x.ten) || {}).k === g.k), t = mine.find(x => x.tt !== 3) || mine[0]; if (t) { seen.add(key); probes.push({ mk: key, label: g.label, t }); } });
+    WORK.forEach(g => { const key = g.k; if (seen.has(key)) return; const mine = workTickets().filter(x => (groupOf(x.ten) || {}).k === g.k), t = mine.find(x => x.tt !== 3) || mine[0]; if (t) { seen.add(key); probes.push({ mk: key, label: g.label, t }); } });
     App.running = true; App.svMsg = 'Đang đọc danh sách máy từ HIS: app mở form của từng thủ thuật rồi đóng lại, không lưu...'; renderAll();
     let res = {}, err = '';
     try { res = await H.fetchMachines(probes); } catch (e) { err = e.message || String(e); }
     let added = 0;
-    Object.keys(res).forEach(mk => { const a = S.may[mk] = S.may[mk] || []; (res[mk] || []).forEach(code => { if (a.indexOf(code) < 0) { a.push(code); if (S.mayOff.indexOf(code) < 0) S.mayOff.push(code); added++; } }); a.sort(); });
+    Object.keys(res).forEach(mk => { const a = S.may[mk] = S.may[mk] || []; (res[mk] || []).forEach(code => { if (a.indexOf(code) < 0) { a.push(code); if (S.mayOff.indexOf(mk + '|' + code) < 0) S.mayOff.push(mk + '|' + code); added++; } }); a.sort(); });
     App.running = false;
     App.svMsg = err ? 'Không đọc được danh sách máy: ' + err : added ? 'Đã thêm ' + added + ' mã máy từ HIS, đang để chưa tích. Hãy tích những máy khoa thực sự dùng.' : 'HIS không có mã máy nào ngoài các máy đã có trong bảng.';
     log(App.svMsg); if (added) touch(); dirty();
@@ -819,7 +827,7 @@ function XepGioCore(H, $) {
     else if (d.cs) { st.cc[d.c].so = e.target.value; persist(); return; }
     else if (d.ch) st.cc[d.c].han = e.target.value;
     else if (d.pr) st.prio[d.g] = +e.target.value;
-    else if (d.may) { if (e.target.checked) S.mayOff = S.mayOff.filter(m => m !== d.may); else S.mayOff.push(d.may); }
+    else if (d.may) { const key = d.g + '|' + d.may; if (e.target.checked) S.mayOff = S.mayOff.filter(m => m !== key); else if (S.mayOff.indexOf(key) < 0) S.mayOff.push(key); }
     else if (/^p[A-Z]/.test(e.target.id || '')) {
       const t = id => X.toMin($(id).value), n = id => Math.max(0, +$(id).value || 0);
       const a0 = t('#pA0'), a1 = t('#pA1'), b0 = t('#pB0'), b1 = t('#pB1');
@@ -830,7 +838,7 @@ function XepGioCore(H, $) {
     dirty();
   });
   $('#cfgCopy').addEventListener('click', () => { const el = $('#cfgText'); el.select(); const sel = () => { $('#cfgMsg').textContent = 'Đã bôi đen, bấm Ctrl+C để chép.'; }; try { navigator.clipboard.writeText(el.value).then(() => { $('#cfgMsg').textContent = 'Đã sao chép.'; }, sel); } catch (err) { sel(); } });
-  $('#cfgLoad').addEventListener('click', () => { try { const o = JSON.parse($('#cfgText').value); if (!o.staff || !o.shifts) throw 0; Object.assign(S, o); S.staff.forEach(ensureStaff); $('#cfgMsg').textContent = 'Đã nạp cài đặt.'; autoBlocks(); dirty(); } catch (err) { $('#cfgMsg').textContent = 'Nội dung không phải file cài đặt hợp lệ.'; } });
+  $('#cfgLoad').addEventListener('click', () => { try { const o = JSON.parse($('#cfgText').value); if (!o.staff || !o.shifts) throw 0; delete S.mayV; Object.assign(S, o); normMay(); S.staff.forEach(ensureStaff); $('#cfgMsg').textContent = 'Đã nạp cài đặt.'; autoBlocks(); dirty(); } catch (err) { $('#cfgMsg').textContent = 'Nội dung không phải file cài đặt hợp lệ.'; } });
   const tip = $('#tip');
   $('#tl').addEventListener('pointermove', e => { const b = e.target.closest('[data-tip]'); if (!b) { tip.hidden = true; return; } tip.textContent = b.dataset.tip; tip.hidden = false; tip.style.left = Math.min(e.clientX + 12, window.innerWidth - 330) + 'px'; tip.style.top = (e.clientY + 14) + 'px'; });
   $('#tl').addEventListener('pointerleave', () => { tip.hidden = true; });
@@ -882,7 +890,7 @@ const DEF_GROUPS = [
   G('tt', 'TT', 'Từ trường', ['từ trường'], 15, 5, 'phcn'),
   G('dp', 'ĐP', 'Điện phân dẫn thuốc', ['điện phân'], 15, 5, 'phcn'),
   G('dx', 'ĐX', 'Điện xung', ['điện xung'], 15, 5, 'phcn'),
-  G('sa', 'SA', 'Siêu âm', ['siêu âm'], 15, 15, 'phcn', 'dx'),
+  G('sa', 'SA', 'Siêu âm', ['siêu âm'], 15, 15, 'phcn'),
   G('xk', 'XK', 'Sóng xung kích', ['xung kích'], 5, 5, 'phcn'),
   G('gt', 'GT', 'Dòng giao thoa', ['giao thoa'], 15, 5, 'phcn'),
   G('ln', 'LN', 'Laser nội mạch', ['laser công suất thấp nội mạch', 'laser nội mạch'], 30, 5, 'phcn'),
@@ -1268,7 +1276,7 @@ function learn() {
     const g = core.groupOf(t.ten);
     if (!g || g.skip) return;
     if (t.perf) { add(t.perf, ''); if (fresh.indexOf(t.perf) >= 0) { const p = S.staff.find(x => x.id === t.perf); p.can[g.k] = true; if (p.cc[g.cert]) p.cc[g.cert].co = true; } }   // người mới: tạm tích các thủ thuật họ đã đứng tên
-    if (t.may) { const key = g.mk || g.k, a = S.may[key] = S.may[key] || []; if (a.indexOf(t.may) < 0) { a.push(t.may); a.sort(); } }   // thủ thuật có mã máy trên HIS thì coi là cần máy
+    if (t.may) { const key = g.k, a = S.may[key] = S.may[key] || []; if (a.indexOf(t.may) < 0) { a.push(t.may); a.sort(); } }   // thủ thuật có mã máy trên HIS thì coi là cần máy
   });
   // Ghép với tài khoản HIS theo họ tên: lấy tên đăng nhập, mã nhân viên (dùng khi điền) và nhóm chức danh
   const byName = new Map(); (R.users || []).forEach(u => { const k = norm(u.FULLNAME); byName.set(k, byName.has(k) ? null : u); });

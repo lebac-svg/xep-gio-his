@@ -6,7 +6,7 @@ if (window.top !== window) return;                           // chỉ gắn ở 
 if (window.__xepgio) return;                                 // đã gắn rồi thì thôi
 const cfg0 = window.__xepgioCfg || {};
 if (cfg0.host && location.hostname !== cfg0.host) return;    // chỉ chạy trên đúng địa chỉ HIS đã khai
-window.__xepgio = { version: '0.21' };
+window.__xepgio = { version: '0.22' };
 
 /*@ENGINE*/
 /*@CORE*/
@@ -37,7 +37,7 @@ const DEF_GROUPS = [
   G('tt', 'TT', 'Từ trường', ['từ trường'], 15, 5, 'phcn'),
   G('dp', 'ĐP', 'Điện phân dẫn thuốc', ['điện phân'], 15, 5, 'phcn'),
   G('dx', 'ĐX', 'Điện xung', ['điện xung'], 15, 5, 'phcn'),
-  G('sa', 'SA', 'Siêu âm', ['siêu âm'], 15, 15, 'phcn', 'dx'),
+  G('sa', 'SA', 'Siêu âm', ['siêu âm'], 15, 15, 'phcn'),
   G('xk', 'XK', 'Sóng xung kích', ['xung kích'], 5, 5, 'phcn'),
   G('gt', 'GT', 'Dòng giao thoa', ['giao thoa'], 15, 5, 'phcn'),
   G('ln', 'LN', 'Laser nội mạch', ['laser công suất thấp nội mạch', 'laser nội mạch'], 30, 5, 'phcn'),
@@ -423,7 +423,7 @@ function learn() {
     const g = core.groupOf(t.ten);
     if (!g || g.skip) return;
     if (t.perf) { add(t.perf, ''); if (fresh.indexOf(t.perf) >= 0) { const p = S.staff.find(x => x.id === t.perf); p.can[g.k] = true; if (p.cc[g.cert]) p.cc[g.cert].co = true; } }   // người mới: tạm tích các thủ thuật họ đã đứng tên
-    if (t.may) { const key = g.mk || g.k, a = S.may[key] = S.may[key] || []; if (a.indexOf(t.may) < 0) { a.push(t.may); a.sort(); } }   // thủ thuật có mã máy trên HIS thì coi là cần máy
+    if (t.may) { const key = g.k, a = S.may[key] = S.may[key] || []; if (a.indexOf(t.may) < 0) { a.push(t.may); a.sort(); } }   // thủ thuật có mã máy trên HIS thì coi là cần máy
   });
   // Ghép với tài khoản HIS theo họ tên: lấy tên đăng nhập, mã nhân viên (dùng khi điền) và nhóm chức danh
   const byName = new Map(); (R.users || []).forEach(u => { const k = norm(u.FULLNAME); byName.set(k, byName.has(k) ? null : u); });
