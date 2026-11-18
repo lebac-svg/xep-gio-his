@@ -293,7 +293,7 @@ summary { cursor: pointer; color: var(--accent); font-weight: 500; }
         </div>
         <div class="row">
           <input type="text" id="bangSearch" placeholder="Tìm người bệnh, người làm, thủ thuật" aria-label="Tìm trong bảng giờ">
-          <select id="planSt" aria-label="Lọc theo trạng thái"><option value="">Mọi trạng thái</option><option value="bad">Cần xem lại</option><option value="plan">Dự kiến, chưa điền</option><option value="his">Đã lưu trên HIS</option><option value="none">Chưa có giờ</option></select>
+          <select id="planSt" aria-label="Lọc theo trạng thái"><option value="">Mọi trạng thái</option><option value="bad">Cần xem lại</option><option value="plan">Dự kiến, chưa điền</option><option value="his">Đã lưu trên HIS</option><option value="none">Chưa có giờ</option><option value="ext">Của khoa khác</option></select>
           <select id="planPerf" aria-label="Lọc theo người làm"></select>
         </div>
       </div>
@@ -324,7 +324,7 @@ summary { cursor: pointer; color: var(--accent); font-weight: 500; }
               <div class="scroll tall"><table id="ccWeek" class="sticky1"></table></div></div></details>
           </div>
           <div class="sec" data-pop="bk">
-            <p class="muted">Dòng "tự động" là bác sĩ khám người bệnh mới vào trong ngày. Dòng "hằng tuần" lấy từ bảng chặn giờ cố định. Dòng "Người bệnh đi CĐHA" lấy từ HIS: chặn từ giờ thực hiện đến giờ trả kết quả của phiếu chẩn đoán hình ảnh; phiếu chưa thực hiện thì chưa có giờ. Thêm chặn tay khi người bệnh ra viện, hoặc người làm bận việc khác.</p>
+            <p class="muted">Dòng "tự động" là bác sĩ khám người bệnh mới vào trong ngày. Dòng "hằng tuần" lấy từ bảng chặn giờ cố định. Dòng "Người bệnh đi CĐHA" lấy từ HIS: chặn từ giờ thực hiện đến giờ trả kết quả của phiếu chẩn đoán hình ảnh; phiếu chưa thực hiện thì chưa có giờ. Dòng "Thủ thuật ở khoa khác" cũng lấy từ HIS: thủ thuật của cùng người bệnh mà khoa, phòng khác đã ghi hoàn thành, chặn đúng giờ đã ghi ở đó; ca họ chưa hoàn thành thì chưa có giờ. Thêm chặn tay khi người bệnh ra viện, hoặc người làm bận việc khác.</p>
             <div class="row"><button type="button" class="small" data-open="wk">Sửa bảng chặn giờ cố định theo tuần</button></div>
             <div class="scroll tall"><table id="blocks"></table></div>
             <div class="row">
@@ -717,15 +717,17 @@ function XepGioCore(H, $) {
   const wkOn = g => (D.wkOff || []).indexOf(g.key) < 0;   // hôm nay có áp dụng không
   // Giờ người bệnh đi chẩn đoán hình ảnh, lấy từ HIS (H.cdha): chặn người bệnh từ giờ thực hiện đến giờ trả kết quả.
   // Các dịch vụ cùng người, cùng giờ gộp thành một dòng; D.cdOff ghi những dòng người dùng bỏ chặn cho ngày chạy.
+  // Dòng có khoa (c.khoa) là thủ thuật của cùng người bệnh do khoa, phòng khác đã hoàn thành trên HIS: chặn người bệnh đúng giờ đã ghi ở đó.
   const cdList = () => {
     const m = new Map();
-    (H.cdha || []).forEach(c => { if (c.s == null || c.e == null || c.e <= c.s) return; const k = c.bn + '|' + c.s + '|' + c.e, o = m.get(k); if (o) { if (c.ten && o.ten.indexOf(c.ten) < 0) o.ten.push(c.ten); } else m.set(k, { key: k, bn: c.bn, s: c.s, e: c.e, ten: c.ten ? [c.ten] : [] }); });
+    (H.cdha || []).forEach(c => { if (c.s == null || c.e == null || c.e <= c.s) return; const k = (c.khoa != null ? 'tt|' : '') + c.bn + '|' + c.s + '|' + c.e, o = m.get(k); if (o) { if (c.ten && o.ten.indexOf(c.ten) < 0) o.ten.push(c.ten); } else m.set(k, { key: k, bn: c.bn, s: c.s, e: c.e, khoa: c.khoa, ten: c.ten ? [c.ten] : [] }); });
     return Array.from(m.values()).sort((a, b) => a.s - b.s);
   };
   const cdOn = c => (D.cdOff || []).indexOf(c.key) < 0;
+  const cdNote = c => (c.khoa != null ? 'Người bệnh làm thủ thuật ở ' + (c.khoa || 'khoa khác') : 'Người bệnh đi chẩn đoán hình ảnh') + (c.ten.length ? ': ' + c.ten.join(', ') : '');
   const blocksEng = () => D.blocks.map(b => ({ kind: b.kind === 'perf' ? 'perf' : 'bn', who: b.who, s: b.s, e: b.kind === 'rv' ? 1440 : b.e, note: b.note }))
     .concat(wkToday().filter(wkOn).reduce((a, g) => a.concat(g.who.map(id => ({ kind: 'perf', who: id, s: g.s, e: g.e, note: 'Giờ chặn cố định theo tuần' }))), []))
-    .concat(cdList().filter(cdOn).map(c => ({ kind: 'bn', who: c.bn, s: c.s, e: c.e, note: 'Người bệnh đi chẩn đoán hình ảnh' + (c.ten.length ? ': ' + c.ten.join(', ') : '') })));
+    .concat(cdList().filter(cdOn).map(c => ({ kind: 'bn', who: c.bn, s: c.s, e: c.e, note: cdNote(c) })));
   function autoBlocks() {   // người bệnh vào viện trong ngày: chặn bác sĩ chỉ định của người đó
     D.blocks = D.blocks.filter(b => !b.auto);
     H.pats.forEach(p => { if (p.vao != null && p.bsId) D.blocks.push({ id: ++D.bkSeq, kind: 'perf', who: p.bsId, s: p.vao, e: p.vao + S.newBlock, note: 'Khám ' + p.ten + ' mới vào lúc ' + hm(p.vao), auto: true }); });
@@ -866,7 +868,7 @@ function XepGioCore(H, $) {
         const hit = new Set(); X.check(curRows(), staffEng(), cfg(), blocksEng()).forEach(c => { if (c.type === 'bblock') c.ids.forEach(id => { const t = byId(id), p = App.plan.get(id); if (t && p && p.status === 'planned' && t.tt !== 3) hit.add(t.bn); }); });
         if (hit.size) buildPlan(hit);
         App.conflicts = null;
-        log('Đã đọc lại phiếu chẩn đoán hình ảnh từ HIS: có giờ mới.' + (hit.size ? ' Các ca chưa điền của ' + hit.size + ' người bệnh bị trùng giờ đã được xếp lại trước khi điền.' : ' Không ca chưa điền nào bị trùng.'));
+        log('Đã đọc lại giờ chẩn đoán hình ảnh và thủ thuật ở khoa khác từ HIS: có giờ mới.' + (hit.size ? ' Các ca chưa điền của ' + hit.size + ' người bệnh bị trùng giờ đã được xếp lại trước khi điền.' : ' Không ca chưa điền nào bị trùng.'));
       }
     }
     const now = H.now();
@@ -994,17 +996,21 @@ function XepGioCore(H, $) {
       const p = App.plan.get(t.id), g = groupOf(t.ten), v0 = p && p.status === 'planned' ? p : t.tt === 3 ? t : null, v = v0 && v0.s != null ? v0 : null;
       return { t, g, v, st: planInfo(t), kind: !v ? 'none' : v === t ? 'his' : 'plan', who: v ? staffName(v.perf) : '', busy: v ? (g ? Math.min(g.busy, v.e - v.s) : v.e - v.s) : 0 };
     });
-    const n = k => all.filter(x => x.kind === k).length;
-    const list = all.filter(x => (!fp || (x.v && x.v.perf === fp)) && (!fs || (fs === 'bad' ? x.st[0] === 'do' : x.kind === fs)) &&
-      (!find || fold([x.t.tenBN, x.t.maBA, x.t.ten, x.who, x.v ? x.v.may || '' : ''].join(' ')).indexOf(find) >= 0));
+    // Thủ thuật của cùng người bệnh do khoa, phòng khác làm (H.ext): hiện cho đủ danh sách. App không xếp, không điền, không gỡ các ca này; nơi đó tự cập nhật.
+    const ext = (H.ext || []).map(e => { const v = e.done && e.s != null ? { s: e.s, e: e.e, perf: e.perf || '', may: e.may || '' } : null;
+      return { ext: true, khoa: e.khoa || 'khoa khác', t: { id: 'x' + e.id, bn: e.bn, tenBN: e.tenBN, maBA: e.maBA, ten: e.ten, cd: e.cd }, g: groupOf(e.ten), v, st: ['info', v ? 'Khoa khác đã cập nhật' : 'Chờ khoa khác cập nhật'], kind: 'ext', who: v ? v.perf : '', busy: 0 }; });
+    const n = k => all.filter(x => x.kind === k).length, extNote = ext.length ? ' · ' + ext.length + ' của khoa khác' : '';
+    const list = all.concat(ext).filter(x => (!fp || (!x.ext && x.v && x.v.perf === fp)) && (!fs || (fs === 'bad' ? x.st[0] === 'do' : x.kind === fs)) &&
+      (!find || fold([x.t.tenBN, x.t.maBA, x.t.ten, x.who, x.khoa || '', x.v ? x.v.may || '' : ''].join(' ')).indexOf(find) >= 0));
     const filtered = !!(find || fp || fs);
     $('#dsInfo').textContent = !H.tickets.length ? 'Chưa có danh sách. Tải danh sách của ngày cần chạy trước.'
-      : `Ngày ${H.dateLabel}: ${all.length} thủ thuật của ${new Set(all.map(x => x.t.bn)).size} người bệnh · ${n('his')} đã lưu trên HIS · ${n('plan')} dự kiến · ${n('none')} chưa có giờ${filtered ? ' · đang hiện ' + list.length + ' dòng khớp bộ lọc' : ''}`;
-    $('#bangSum').textContent = H.tickets.length ? `${all.length} thủ thuật · ${n('his')} đã lưu · ${n('plan')} dự kiến · ${n('none')} chưa có giờ` : '';
+      : `Ngày ${H.dateLabel}: ${all.length} thủ thuật của ${new Set(all.map(x => x.t.bn)).size} người bệnh · ${n('his')} đã lưu trên HIS · ${n('plan')} dự kiến · ${n('none')} chưa có giờ${extNote}${filtered ? ' · đang hiện ' + list.length + ' dòng khớp bộ lọc' : ''}`;
+    $('#bangSum').textContent = H.tickets.length ? `${all.length} thủ thuật · ${n('his')} đã lưu · ${n('plan')} dự kiến · ${n('none')} chưa có giờ${extNote}` : '';
     if (view === 'tl' || App.pop !== 'bang') return;
     const time = x => x.v ? x.v.s : 9999, cmp = (a, b) => String(a).localeCompare(String(b), 'vi'), byTime = (a, b) => time(a) - time(b) || cmp(a.t.tenBN, b.t.tenBN) || (a.t.id < b.t.id ? -1 : 1);
     const line = (x, showBn) => {
       const t = x.t, v = x.v; let who = esc(x.who);
+      if (x.ext) return `<tr class="off">${showBn ? '' : '<td></td>'}<td>${v ? hm(v.s) + '–' + hm(v.e) : ''}</td>${showBn ? `<td>${esc(t.tenBN)}<span class="sub">${esc(t.maBA || '')}</span></td>` : ''}<td class="dsname">${esc(t.ten)}<span class="sub" style="display:block;margin-left:0">${esc(x.khoa)}</span></td><td>${t.cd ? hm(t.cd) : ''}</td><td>${who}</td><td>${esc(v ? v.may || '' : '')}</td><td class="stcell"><span class="pill info">${esc(x.st[1])}</span></td></tr>`;
       if (t.tt !== 3 || App.move.has(t.id)) {   // ca chưa lưu, hoặc ca xanh đang được xếp lại: chọn được người làm
         const m = App.manual.get(t.id) || '';
         who = `<select id="pp_${eid(t.id)}" data-pin="${esc(t.id)}" aria-label="Người làm"><option value="">${v && !m ? esc(x.who) + ' (tự chọn)' : 'Tự chọn'}</option>` +
@@ -1022,12 +1028,12 @@ function XepGioCore(H, $) {
       body = Array.from(H.pats.values()).map(p => {
         const rows = list.filter(x => x.t.bn === p.bn).sort(byTime); if (!rows.length) return '';
         const mine = all.filter(x => x.t.bn === p.bn), has = mine.filter(x => x.v), am = has.filter(x => x.v.s < mid).length, rest = mine.length - has.length;
-        const bad = mine.filter(x => x.st[0] === 'do').length, nPlan = mine.filter(x => x.kind === 'plan').length, nHis = mine.filter(x => x.kind === 'his').length;
+        const bad = mine.filter(x => x.st[0] === 'do').length, nPlan = mine.filter(x => x.kind === 'plan').length, nHis = mine.filter(x => x.kind === 'his').length, nExt = ext.filter(x => x.t.bn === p.bn).length;
         const open = shutBn.has(p.bn) ? false : openBn.has(p.bn) || bad > 0 || filtered; if (open) anyOpen = true;
         const pills = (bad ? `<span class="pill do">${bad} cần xem lại</span>` : '') + (nPlan ? `<span class="pill vang">${nPlan} dự kiến</span>` : '') + (nHis ? `<span class="pill xanh">${nHis} đã lưu</span>` : '');
         const caret = `<button type="button" class="caret" data-foldbn="${esc(p.bn)}" aria-expanded="${open}" aria-label="${open ? 'Thu lại' : 'Mở ra'} các ca của ${esc(p.ten)}">${open ? '▾' : '▸'}</button>`;
-        if (!open) return `<tr class="grp" data-bn="${esc(p.bn)}"><td class="c"><input type="checkbox" id="bs_${eid(p.bn)}" data-selbn="${esc(p.bn)}"${App.sel.has(p.bn) ? ' checked' : ''} aria-label="Chọn ${esc(p.ten)}"></td><td colspan="5">${caret}${esc(p.ten)}<span class="sub">${esc(p.maBA || '')}</span>${p.vao != null ? ' <span class="tag">mới vào ' + hm(p.vao) + '</span>' : ''}${goneBn(p.bn) ? ' <span class="tag">đã ra viện</span>' : outBn(p.bn) ? ' <span class="tag">ra viện hôm nay</span>' : ''} <span class="muted" style="font-weight:400">· ${mine.length} thủ thuật · ${am} sáng, ${has.length - am} chiều${rest ? ', ' + rest + ' chưa có giờ' : ''}</span></td><td class="stcell">${pills}<button type="button" class="small" data-runbn="${esc(p.bn)}">Chạy riêng</button></td></tr>`;
-        return `<tr class="grp open" data-bn="${esc(p.bn)}"><td class="c"><input type="checkbox" id="bs_${eid(p.bn)}" data-selbn="${esc(p.bn)}"${App.sel.has(p.bn) ? ' checked' : ''} aria-label="Chọn ${esc(p.ten)}"></td><td colspan="5">${caret}${esc(p.ten)}<span class="sub">${esc(p.maBA || '')}</span>${p.vao != null ? ' <span class="tag">mới vào ' + hm(p.vao) + '</span>' : ''}${goneBn(p.bn) ? ' <span class="tag">đã ra viện</span>' : outBn(p.bn) ? ' <span class="tag">ra viện hôm nay</span>' : ''} <span class="muted" style="font-weight:400">· ${mine.length} thủ thuật · ${am} sáng, ${has.length - am} chiều${rest ? ', ' + rest + ' chưa có giờ' : ''}</span></td><td class="stcell">${pills}<button type="button" class="small" data-runbn="${esc(p.bn)}">Chạy riêng</button></td></tr>` +
+        if (!open) return `<tr class="grp" data-bn="${esc(p.bn)}"><td class="c"><input type="checkbox" id="bs_${eid(p.bn)}" data-selbn="${esc(p.bn)}"${App.sel.has(p.bn) ? ' checked' : ''} aria-label="Chọn ${esc(p.ten)}"></td><td colspan="5">${caret}${esc(p.ten)}<span class="sub">${esc(p.maBA || '')}</span>${p.vao != null ? ' <span class="tag">mới vào ' + hm(p.vao) + '</span>' : ''}${goneBn(p.bn) ? ' <span class="tag">đã ra viện</span>' : outBn(p.bn) ? ' <span class="tag">ra viện hôm nay</span>' : ''} <span class="muted" style="font-weight:400">· ${mine.length} thủ thuật · ${am} sáng, ${has.length - am} chiều${rest ? ', ' + rest + ' chưa có giờ' : ''}${nExt ? ' · ' + nExt + ' ở khoa khác' : ''}</span></td><td class="stcell">${pills}<button type="button" class="small" data-runbn="${esc(p.bn)}">Chạy riêng</button></td></tr>`;
+        return `<tr class="grp open" data-bn="${esc(p.bn)}"><td class="c"><input type="checkbox" id="bs_${eid(p.bn)}" data-selbn="${esc(p.bn)}"${App.sel.has(p.bn) ? ' checked' : ''} aria-label="Chọn ${esc(p.ten)}"></td><td colspan="5">${caret}${esc(p.ten)}<span class="sub">${esc(p.maBA || '')}</span>${p.vao != null ? ' <span class="tag">mới vào ' + hm(p.vao) + '</span>' : ''}${goneBn(p.bn) ? ' <span class="tag">đã ra viện</span>' : outBn(p.bn) ? ' <span class="tag">ra viện hôm nay</span>' : ''} <span class="muted" style="font-weight:400">· ${mine.length} thủ thuật · ${am} sáng, ${has.length - am} chiều${rest ? ', ' + rest + ' chưa có giờ' : ''}${nExt ? ' · ' + nExt + ' ở khoa khác' : ''}</span></td><td class="stcell">${pills}<button type="button" class="small" data-runbn="${esc(p.bn)}">Chạy riêng</button></td></tr>` +
           rows.map(x => line(x, false)).join('');
       }).join('');
       App.bnAnyOpen = anyOpen; $('#bnFold').textContent = anyOpen ? 'Thu hết' : 'Mở hết';
@@ -1035,13 +1041,15 @@ function XepGioCore(H, $) {
       const known = new Set(S.staff.map(s => s.id));
       const others = Array.from(new Set(all.map(x => x.v && x.v.perf).filter(p => p && !known.has(p)))).map(p => ({ id: p, ten: staffName(p), out: true }));
       body = S.staff.concat(others).filter(st => !fp || st.id === fp).map(st => {
-        const rows = list.filter(x => x.v && x.v.perf === st.id).sort(byTime); if (!rows.length && filtered && !(fp && !find && !fs)) return '';
+        const rows = list.filter(x => !x.ext && x.v && x.v.perf === st.id).sort(byTime); if (!rows.length && filtered && !(fp && !find && !fs)) return '';
         const mine = all.filter(x => x.v && x.v.perf === st.id), on = D.on[st.id] || [false, false], avail = (on[0] ? S.shifts[0][1] - S.shifts[0][0] : 0) + (on[1] ? S.shifts[1][1] - S.shifts[1][0] : 0);
         const busy = mine.reduce((k, x) => k + x.busy, 0), am = mine.filter(x => x.v.s < mid).length;
         return `<tr class="grp"><td colspan="7">${esc(st.ten)} <span class="muted" style="font-weight:400">· ${st.out ? 'không có trong bảng nhân viên' : on[0] && on[1] ? 'cả ngày' : on[0] ? 'buổi sáng' : on[1] ? 'buổi chiều' : 'nghỉ'} · ${mine.length} ca (${am} sáng, ${mine.length - am} chiều) · ${busy} phút trực tiếp làm${avail ? ' trên ' + avail + ' phút có mặt' : ''}</span></td></tr>` + rows.map(x => line(x, true)).join('');
       }).join('');
-      const none = list.filter(x => !x.v || !x.v.perf).sort(byTime);
+      const none = list.filter(x => !x.ext && (!x.v || !x.v.perf)).sort(byTime);
       if (none.length && !fp) body += `<tr class="grp"><td colspan="7">Chưa có người làm <span class="muted" style="font-weight:400">· ${none.length} ca</span></td></tr>` + none.map(x => line(x, true)).join('');
+      const xs = list.filter(x => x.ext).sort(byTime);
+      if (xs.length && !fp) body += `<tr class="grp"><td colspan="7">Khoa khác làm <span class="muted" style="font-weight:400">· ${xs.length} ca, app không xếp và không điền</span></td></tr>` + xs.map(x => line(x, true)).join('');
     }
     $('#plan').innerHTML = '<thead><tr>' + head + '</tr></thead><tbody>' + (body || `<tr><td colspan="7" class="empty">${!H.tickets.length ? 'Chưa có danh sách. Tải danh sách của ngày cần chạy trước.' : 'Không có ca nào khớp bộ lọc.'}</td></tr>`) + '</tbody>';
   }
@@ -1054,7 +1062,7 @@ function XepGioCore(H, $) {
     const kindName = b => b.auto ? 'Bác sĩ khám người bệnh mới' : b.kind === 'perf' ? 'Chặn người làm' : b.kind === 'rv' ? 'Ra viện, xử trí' : 'Chặn người bệnh';
     const wk = wkToday(), cd = cdList();
     $('#blocks').innerHTML = '<thead><tr><th>Loại</th><th>Ai</th><th>Từ</th><th>Đến</th><th></th></tr></thead><tbody>' +
-      cd.map(c => { const on = cdOn(c); return `<tr${on ? '' : ' class="off"'}><td>Người bệnh đi CĐHA <span class="tag">tự động</span></td><td class="wrapcell">${esc((H.pats.get(c.bn) || {}).ten || c.bn)}${c.ten.length ? '<span class="sub">' + esc(c.ten.join(', ')) + '</span>' : ''}${on ? '' : ' · đã bỏ chặn'}</td><td>${hm(c.s)}</td><td>${c.e >= 1440 ? 'hết ngày' : hm(c.e)}</td><td><button type="button" class="small" data-cdoff="${esc(c.key)}">${on ? 'Bỏ chặn' : 'Dùng lại'}</button></td></tr>`; }).join('') +
+      cd.map(c => { const on = cdOn(c); return `<tr${on ? '' : ' class="off"'}><td>${c.khoa != null ? 'Thủ thuật ở khoa khác' : 'Người bệnh đi CĐHA'} <span class="tag">tự động</span></td><td class="wrapcell">${esc((H.pats.get(c.bn) || {}).ten || c.bn)}${c.ten.length || c.khoa ? '<span class="sub">' + esc([c.khoa].concat(c.ten).filter(Boolean).join(' · ')) + '</span>' : ''}${on ? '' : ' · đã bỏ chặn'}</td><td>${hm(c.s)}</td><td>${c.e >= 1440 ? 'hết ngày' : hm(c.e)}</td><td><button type="button" class="small" data-cdoff="${esc(c.key)}">${on ? 'Bỏ chặn' : 'Dùng lại'}</button></td></tr>`; }).join('') +
       wk.map(g => { const on = wkOn(g), names = g.who.map(staffName).join(', '); return `<tr${on ? '' : ' class="off"'}><td>Chặn người làm <span class="tag">hằng tuần</span></td><td class="wrapcell">${esc(g.who.length > 2 ? g.who.length + ' người: ' + names : names)}${on ? '' : ' · hôm nay không áp dụng'}</td><td>${hm(g.s)}</td><td>${hm(g.e)}</td><td><button type="button" class="small" data-wkoff="${g.key}">${on ? 'Bỏ hôm nay' : 'Dùng lại'}</button></td></tr>`; }).join('') +
       (D.blocks.length ? D.blocks.slice().sort((a, b) => a.s - b.s).map(b => `<tr><td>${kindName(b)}${b.auto ? ' <span class="tag">tự động</span>' : ''}</td>` +
         `<td>${esc(b.kind === 'perf' ? staffName(b.who) : (H.pats.get(b.who) || {}).ten || b.who)}</td><td>${hm(b.s)}</td><td>${b.kind === 'rv' ? 'hết ngày' : hm(b.e)}</td><td><button type="button" class="small" data-delbk="${b.id}">Xóa</button></td></tr>`).join('')
@@ -1732,7 +1740,12 @@ $('#btnReset').addEventListener('click', () => { if (!core.App.running) start(tr
 function start(again) {
   HIS.now = X.toMin($('#nowInput').value) || 725;
   genData(); core.boot(false);
-  H.cdha = [{ bn: 'bn3', s: 480, e: 492, ten: 'Chụp X-quang cột sống thắt lưng' }, { bn: 'bn3', s: 480, e: 492, ten: 'Chụp X-quang khớp gối' }, { bn: 'bn8', s: 545, e: 550, ten: 'Siêu âm ổ bụng' }, { bn: 'bn14', s: 850, e: 858, ten: 'Đo mật độ xương' }];   // ví dụ: giờ đi chẩn đoán hình ảnh
+  H.cdha = [{ bn: 'bn3', s: 480, e: 492, ten: 'Chụp X-quang cột sống thắt lưng' }, { bn: 'bn3', s: 480, e: 492, ten: 'Chụp X-quang khớp gối' }, { bn: 'bn8', s: 545, e: 550, ten: 'Siêu âm ổ bụng' }, { bn: 'bn14', s: 850, e: 858, ten: 'Đo mật độ xương' },
+    { bn: 'bn5', s: 837, e: 852, ten: 'Điều trị bằng máy kéo giãn cột sống', khoa: 'Khoa Vật lý trị liệu - Phục hồi chức năng' }];   // ví dụ: giờ đi chẩn đoán hình ảnh, và một thủ thuật khoa khác đã hoàn thành
+  // ví dụ: danh sách đủ các thủ thuật khoa khác của người bệnh trong ngày, một ca đã cập nhật và một ca chưa
+  const p5 = HIS.pats.get('bn5') || {};
+  H.ext = [{ id: 'k1', bn: 'bn5', tenBN: p5.ten, maBA: p5.maBA, ten: 'Điều trị bằng máy kéo giãn cột sống', cd: 454, s: 837, e: 852, perf: 'Kỹ thuật viên khoa PHCN', may: 'KG.1.0245', khoa: 'Khoa Vật lý trị liệu - Phục hồi chức năng', done: true },
+    { id: 'k2', bn: 'bn5', tenBN: p5.ten, maBA: p5.maBA, ten: 'Tập vận động có trợ giúp', cd: 454, s: null, e: null, perf: '', may: '', khoa: 'Khoa Vật lý trị liệu - Phục hồi chức năng', done: false }];
   core.S.staff.slice(0, 4).forEach(p => { core.S.wkTime[p.id] = '07:30-07:45'; });   // ví dụ giờ chặn cố định
   renderHis(); core.renderAll();
   core.log((again ? 'Đã tạo lại dữ liệu giả. ' : '') + `Đã tải danh sách ngày 17/11/2026 từ HIS mô phỏng: ${HIS.tickets.length} phiếu, ${Array.from(HIS.pats.values()).filter(p => p.vao != null).length} người bệnh mới vào trong ngày.`);
