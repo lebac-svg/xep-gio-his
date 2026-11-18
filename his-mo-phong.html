@@ -133,7 +133,9 @@ tr.off td { color: var(--muted); }
 .mgrp button { border: 0; background: none; text-align: left; padding: 7px 8px; border-radius: 6px; }
 .mgrp button:hover:not(:disabled) { background: var(--sunk); }
 details.card { background: var(--surface); }
-details.fold > summary .sum { font-weight: 400; color: var(--muted); font-size: 13px; margin-left: 8px; }
+details.fold > summary .sum, .openbar .sum { font-weight: 400; color: var(--muted); font-size: 13px; margin-left: 8px; }
+.openbar { border: 1px solid var(--line); border-radius: var(--r); padding: 10px 14px; background: var(--surface); font-size: 14px; }
+.popbox.wide { width: min(1500px, 100%); }
 /* Cửa sổ nổi */
 .pop { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, .4); display: flex; align-items: flex-start; justify-content: center; padding: 16px; }
 .popbox { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); width: min(1000px, 100%); max-height: 100%; display: flex; flex-direction: column; box-shadow: 0 16px 48px rgba(0, 0, 0, .28); min-width: 0; }
@@ -249,10 +251,25 @@ summary { cursor: pointer; color: var(--accent); font-weight: 500; }
     </div>
   </section>
 
-  <!-- ===== Bảng giờ: mở ra, thu lại ngay dưới màn chính ===== -->
-  <details class="fold card" id="tab-bang">
-    <summary>Bảng giờ <span class="sum" id="bangSum"></span></summary>
+  <!-- ===== Lọc trùng ===== -->
+  <details class="fold card" id="tab-trung">
+    <summary>Lọc trùng <span class="cnt" id="cntTrung" hidden></span></summary>
     <div class="in">
+      <div class="bar"><div class="tiles" id="trungTiles" style="flex:1 1 260px"></div>
+        <div class="row"><select id="trungType" aria-label="Lọc loại lỗi"></select><button id="btnCheck2" type="button">Kiểm tra trùng</button><button id="btnFix2" type="button" class="primary">Tự sắp xếp lại</button></div></div>
+      <div class="scroll"><table id="trungTable"></table></div>
+    </div>
+  </details>
+
+  <!-- ===== Bảng giờ: một dòng tóm tắt dưới Lọc trùng, bấm để mở thành cửa sổ nổi ===== -->
+  <div class="card openbar bar" id="bangBar"><div><b>Bảng giờ</b><span class="sum" id="bangSum"></span></div><button type="button" data-open="bang">Mở bảng giờ</button></div>
+
+  <!-- ===== Cửa sổ nổi: bảng giờ, chấm công, chặn giờ, phiếu sót và từng mục cài đặt ===== -->
+  <div class="pop" id="pop" hidden>
+    <div class="popbox" role="dialog" aria-modal="true" aria-labelledby="popTitle">
+      <header><h2 id="popTitle"></h2><button type="button" id="popClose" class="primary">Xong</button></header>
+      <div class="popbody">
+        <div class="sec" data-pop="bang" id="tab-bang">
       <div class="bar">
         <div class="seg" id="bangView" role="group" aria-label="Cách xem">
           <button type="button" data-view="gio">Theo giờ</button><button type="button" data-view="bn">Theo người bệnh</button><button type="button" data-view="perf">Theo người làm</button><button type="button" data-view="tl">Thanh thời gian</button>
@@ -278,24 +295,7 @@ summary { cursor: pointer; color: var(--accent); font-weight: 500; }
         <div class="tlwrap"><div class="tl" id="tl"></div></div>
         <p class="muted" id="tlInfo">Theo người làm: mỗi ô là quãng người đó trực tiếp làm. Theo người bệnh hoặc máy: mỗi ô là cả ca. Rê chuột hoặc bấm vào ô để xem chi tiết; bấm tên người làm để chỉ xem người đó.</p>
       </div>
-    </div>
-  </details>
-
-  <!-- ===== Lọc trùng ===== -->
-  <details class="fold card" id="tab-trung">
-    <summary>Lọc trùng <span class="cnt" id="cntTrung" hidden></span></summary>
-    <div class="in">
-      <div class="bar"><div class="tiles" id="trungTiles" style="flex:1 1 260px"></div>
-        <div class="row"><select id="trungType" aria-label="Lọc loại lỗi"></select><button id="btnCheck2" type="button">Kiểm tra trùng</button><button id="btnFix2" type="button" class="primary">Tự sắp xếp lại</button></div></div>
-      <div class="scroll"><table id="trungTable"></table></div>
-    </div>
-  </details>
-
-  <!-- ===== Cửa sổ nổi: chấm công, chặn giờ, phiếu sót và từng mục cài đặt ===== -->
-  <div class="pop" id="pop" hidden>
-    <div class="popbox" role="dialog" aria-modal="true" aria-labelledby="popTitle">
-      <header><h2 id="popTitle"></h2><button type="button" id="popClose" class="primary">Xong</button></header>
-      <div class="popbody">
+        </div>
         <div id="tab-cc" class="col">
           <div class="sec" data-pop="cc">
             <div class="bar"><h3 id="ccTitle">Chấm công</h3>
@@ -312,6 +312,7 @@ summary { cursor: pointer; color: var(--accent); font-weight: 500; }
             <div class="scroll tall"><table id="blocks"></table></div>
             <div class="row">
               <select id="bkKind" aria-label="Loại chặn"><option value="perf">Chặn người làm</option><option value="bn">Chặn người bệnh</option><option value="rv">Ra viện, xử trí</option></select>
+              <input type="text" id="bkFind" size="14" placeholder="Gõ tên để tìm" aria-label="Gõ tên để tìm người bị chặn">
               <select id="bkWho" aria-label="Người bị chặn"></select>
               <label for="bkS">Từ <input type="time" id="bkS" value="08:00"></label>
               <label for="bkE" id="bkELabel">Đến <input type="time" id="bkE" value="08:10"></label>
@@ -903,6 +904,8 @@ function XepGioCore(H, $) {
     const res = buildPlan(scope);
     const names = Array.from(scope).map(b => H.pats.get(b).ten).join(', ');
     log(`Chạy riêng cho ${names}: ${res.filter(r => r.status === 'planned').length} ca đã xếp, ${res.filter(r => r.status === 'stuck').length} ca kẹt.`);
+    scope.forEach(b => App.sel.delete(b));   // chạy xong thì bỏ tích, lần sau tích người khác không bị lẫn
+    if (H.canFill) closePop();
     renderAll(); askFill(scope);
   }
 
@@ -933,7 +936,7 @@ function XepGioCore(H, $) {
     $('#dsInfo').textContent = !H.tickets.length ? 'Chưa có danh sách. Tải danh sách của ngày cần chạy trước.'
       : `Ngày ${H.dateLabel}: ${all.length} thủ thuật của ${new Set(all.map(x => x.t.bn)).size} người bệnh · ${n('his')} đã lưu trên HIS · ${n('plan')} dự kiến · ${n('none')} chưa có giờ${filtered ? ' · đang hiện ' + list.length + ' dòng khớp bộ lọc' : ''}`;
     $('#bangSum').textContent = H.tickets.length ? `${all.length} thủ thuật · ${n('his')} đã lưu · ${n('plan')} dự kiến · ${n('none')} chưa có giờ` : '';
-    if (view === 'tl' || !$('#tab-bang').open) return;
+    if (view === 'tl' || App.pop !== 'bang') return;
     const time = x => x.v ? x.v.s : 9999, cmp = (a, b) => String(a).localeCompare(String(b), 'vi'), byTime = (a, b) => time(a) - time(b) || cmp(a.t.tenBN, b.t.tenBN) || (a.t.id < b.t.id ? -1 : 1);
     const line = (x, showBn) => {
       const t = x.t, v = x.v; let who = esc(x.who);
@@ -977,9 +980,12 @@ function XepGioCore(H, $) {
       (D.blocks.length ? D.blocks.slice().sort((a, b) => a.s - b.s).map(b => `<tr><td>${kindName(b)}${b.auto ? ' <span class="tag">tự động</span>' : ''}</td>` +
         `<td>${esc(b.kind === 'perf' ? staffName(b.who) : (H.pats.get(b.who) || {}).ten || b.who)}</td><td>${hm(b.s)}</td><td>${b.kind === 'rv' ? 'hết ngày' : hm(b.e)}</td><td><button type="button" class="small" data-delbk="${b.id}">Xóa</button></td></tr>`).join('')
         : wk.length ? '' : '<tr><td colspan="5" class="empty">Chưa có giờ chặn nào.</td></tr>') + '</tbody>';
-    const kind = $('#bkKind').value, cur = $('#bkWho').value;
-    $('#bkWho').innerHTML = kind === 'perf' ? S.staff.map(s => `<option value="${esc(s.id)}">${esc(s.ten)}</option>`).join('') : Array.from(H.pats.values()).map(p => `<option value="${esc(p.bn)}">${esc(p.ten)}</option>`).join('');
-    if (cur && Array.from($('#bkWho').options).some(o => o.value === cur)) $('#bkWho').value = cur;
+    // Ô gõ tên: gõ một phần tên, có dấu hay không dấu đều được, danh sách chỉ còn những người khớp
+    const kind = $('#bkKind').value, cur = $('#bkWho').value, q = fold($('#bkFind').value.trim());
+    const opts = (kind === 'perf' ? S.staff.map(s => [s.id, s.ten, s.ten + ' ' + (s.user || '')]) : Array.from(H.pats.values()).map(p => [p.bn, p.ten + (p.maBA ? ' · ' + p.maBA : ''), p.ten + ' ' + (p.maBA || '')]))
+      .filter(o => !q || fold(o[2]).indexOf(q) >= 0);
+    $('#bkWho').innerHTML = opts.length ? opts.map(o => `<option value="${esc(o[0])}">${esc(o[1])}</option>`).join('') : `<option value="">${q ? 'Không có ai khớp' : 'Chưa có danh sách'}</option>`;
+    if (cur && opts.some(o => o[0] === cur)) $('#bkWho').value = cur;
     $('#bkELabel').hidden = kind === 'rv';
   }
   function renderTiles() {
@@ -1021,7 +1027,7 @@ function XepGioCore(H, $) {
       : `<tr><td colspan="3" class="empty">${c.length ? 'Không có lỗi loại này.' : 'Không có ca nào trùng hoặc sai quy tắc trong ' + rows.size + ' ca đã soát.'}</td></tr>`) + '</tbody>';
   }
   function renderTL() {
-    if (!$('#tab-bang').open || App.view !== 'tl') return;
+    if (App.pop !== 'bang' || App.view !== 'tl') return;
     // Theo người làm: mỗi ô là quãng trực tiếp làm, nên các ô của một người không chồng lên nhau. Theo người bệnh hoặc máy: mỗi ô là cả ca.
     const mode = $('#tlMode').value, rows = curRows(), sh = S.shifts, ppm = mode === 'perf' ? 3.2 : 2.4, find = fold($('#bangSearch').value.trim());
     const t0 = sh[0][0] - 15, t1 = sh[sh.length - 1][1] + 15, W = Math.round((t1 - t0) * ppm), px = m => Math.round((Math.max(t0, Math.min(t1, m)) - t0) * ppm);
@@ -1224,18 +1230,21 @@ function XepGioCore(H, $) {
   function renderAll() { refreshWork(); renderPerfFilter(); renderTiles(); renderSetup(); renderSot(); renderBlocks(); renderWk(); renderBang(); renderTrung(); renderTL(); renderCC(); renderCD(); }
 
   /* ---------- sự kiện ---------- */
-  // Bảng giờ và Lọc trùng mở ra ngay dưới màn chính; các phần còn lại mở thành cửa sổ nổi, mỗi lần một phần.
-  const POPS = { cc: 'Chấm công', bk: 'Chặn giờ trong ngày', wk: 'Chặn giờ cố định theo tuần', sot: 'Phiếu sót của các ngày trước', staff: 'Nhân viên', cert: 'Chứng chỉ: ai được làm thủ thuật nào', prio: 'Ưu tiên người làm cho từng thủ thuật', svc: 'Thủ thuật và máy', param: 'Giờ làm việc và khoảng nghỉ', file: 'Chuyển cài đặt sang máy khác' };
+  // Lọc trùng mở ra ngay dưới màn chính; Bảng giờ và các phần còn lại mở thành cửa sổ nổi, mỗi lần một phần.
+  const POPS = { bang: 'Bảng giờ', cc: 'Chấm công', bk: 'Chặn giờ trong ngày', wk: 'Chặn giờ cố định theo tuần', sot: 'Phiếu sót của các ngày trước', staff: 'Nhân viên', cert: 'Chứng chỉ: ai được làm thủ thuật nào', prio: 'Ưu tiên người làm cho từng thủ thuật', svc: 'Thủ thuật và máy', param: 'Giờ làm việc và khoảng nghỉ', file: 'Chuyển cài đặt sang máy khác' };
   const closeMenu = () => { $('#menu').hidden = true; $('#menuBtn').setAttribute('aria-expanded', 'false'); };
-  function closePop() { $('#pop').hidden = true; App.pop = null; }
+  function closePop() { $('#pop').hidden = true; App.pop = null; if (H.onPop) H.onPop(null); }
   function openThing(k) {
     closeMenu();
-    if (k === 'bang' || k === 'trung') { closePop(); const d = $('#tab-' + k); d.open = true; redraw(); try { d.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) {} return; }
+    if (k === 'trung') { closePop(); const d = $('#tab-trung'); d.open = true; try { d.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) {} return; }
     if (!POPS[k]) { closePop(); return; }
     App.pop = k; $('#popTitle').textContent = POPS[k];
     Array.from($('#pop').querySelectorAll('[data-pop]')).forEach(el => { el.hidden = el.dataset.pop !== k; });
     $('#tab-cc').hidden = k !== 'cc' && k !== 'bk' && k !== 'wk'; $('#tab-cd').hidden = ['staff', 'cert', 'prio', 'svc', 'param', 'file'].indexOf(k) < 0;
+    $('#pop').querySelector('.popbox').classList.toggle('wide', k === 'bang');
     $('#pop').hidden = false;
+    if (H.onPop) H.onPop(k);
+    if (k === 'bang') redraw();   // bảng giờ chỉ vẽ khi đang mở
   }
   function showTab(k) {   // tên thẻ của các bản trước vẫn dùng được
     if (['bn', 'ds', 'lam', 'tl'].indexOf(k) >= 0) k = 'bang';
@@ -1270,7 +1279,7 @@ function XepGioCore(H, $) {
     if (a[0] === 'bang') { $('#planSt').value = a[1] || ''; $('#planPerf').value = ''; $('#bangSearch').value = ''; if (App.view === 'tl') App.view = 'gio'; }
     openThing(a[0]);
   });
-  ['#menubar', '#tab-run', '#pop'].forEach(sel => $(sel).addEventListener('click', e => { const b = e.target.closest('[data-open]'); if (b) openThing(b.dataset.open); }));
+  ['#menubar', '#tab-run', '#bangBar', '#pop'].forEach(sel => $(sel).addEventListener('click', e => { const b = e.target.closest('[data-open]'); if (b) openThing(b.dataset.open); }));
   $('#menuBtn').addEventListener('click', () => { const m = $('#menu'); m.hidden = !m.hidden; $('#menuBtn').setAttribute('aria-expanded', String(!m.hidden)); });
   document.addEventListener('click', e => { if (!$('#menu').hidden && (e.composedPath ? e.composedPath() : []).indexOf($('#menubar')) < 0) closeMenu(); });
   document.addEventListener('keydown', e => { if (e.key !== 'Escape') return; if (!$('#menu').hidden) closeMenu(); else if (!$('#pop').hidden) closePop(); });
@@ -1299,12 +1308,14 @@ function XepGioCore(H, $) {
     S.staff.forEach(st => { if (k === '-' ? S.wkTime[st.id] : k && st.nhom !== nhoms[+k.slice(1)]) return; S.wkTime[st.id] = txt; n++; });
     $('#wkMsg').textContent = `Đã điền ${txt} cho ${n} người.`; dirty();
   });
-  $('#bkKind').addEventListener('change', renderBlocks);
+  $('#bkKind').addEventListener('change', () => { $('#bkFind').value = ''; renderBlocks(); });
+  $('#bkFind').addEventListener('input', renderBlocks);
   $('#bkAdd').addEventListener('click', () => {
     const kind = $('#bkKind').value, s = X.toMin($('#bkS').value), e = kind === 'rv' ? 1440 : X.toMin($('#bkE').value);
     if (!$('#bkWho').value) { log('Chưa thêm được chặn giờ: chưa chọn người.'); return; }
     if (s == null || e == null || e <= s) { log('Chưa thêm được chặn giờ: giờ đến phải sau giờ từ.'); return; }
     D.blocks.push({ id: ++D.bkSeq, kind, who: $('#bkWho').value, s, e, note: kind === 'rv' ? 'Ra viện, xử trí' : kind === 'perf' ? 'Chặn người làm' : 'Chặn người bệnh', auto: false });
+    $('#bkFind').value = '';
     log('Đã thêm chặn giờ. Bấm Kiểm tra trùng để xem ca nào bị đụng.'); dirty();
   });
   $('#blocks').addEventListener('click', e => {
