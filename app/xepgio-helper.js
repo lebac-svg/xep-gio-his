@@ -6,7 +6,7 @@ if (window.top !== window) return;                           // chỉ gắn ở 
 if (window.__xepgio) return;                                 // đã gắn rồi thì thôi
 const cfg0 = window.__xepgioCfg || {};
 if (cfg0.host && location.hostname !== cfg0.host) return;    // chỉ chạy trên đúng địa chỉ HIS đã khai
-window.__xepgio = { version: '0.32' };
+window.__xepgio = { version: '0.33' };
 
 const X = (function () {
   const toMin = s => { const m = /(\d{1,2}):(\d{2})/.exec(s || ''); return m ? +m[1] * 60 + +m[2] : null; };
@@ -1139,6 +1139,7 @@ shadow.innerHTML = '<style>' + CSS + `
       <h2>Xếp giờ thủ thuật</h2>
       <span class="muted" id="xgMsg"></span>
       <label for="xgDate">Ngày <input type="date" id="xgDate"></label>
+      <label for="xgNow">Giả Lập <input type="time" id="xgNow" value="16:30"></label>
       <button type="button" class="primary" id="xgLoad">Tải danh sách</button>
       <button type="button" id="xgSize">Mở rộng</button>
       <button type="button" id="xgMini">Thu gọn</button>
@@ -1164,7 +1165,7 @@ const lvOf = on => on[0] && on[1] ? 0 : on[0] ? 1 : on[1] ? 2 : 3;
 
 const H = {
   get tickets() { return R.tickets; }, get pats() { return R.pats; }, get missed() { return R.missed || []; },
-  now() { const t = iso(new Date()); if (R.date < t) return 1440; if (R.date > t) return -1; const d = new Date(); return d.getHours() * 60 + d.getMinutes(); },
+  now() { const t = iso(new Date()); if (R.date < t) return 1440; if (R.date > t) return -1; const f = X.toMin($('#xgNow').value); if (f != null) return f; const d = new Date(); return d.getHours() * 60 + d.getMinutes(); },
   get dateLabel() { return vn(R.date); }, get runDate() { return R.date; }, canGo: true, canFill: true, strict: true,
   // Tự điền dần chỉ mở sau khi đã có ít nhất một ca được điền thành công trên máy này
   get noAuto() { return !store().autoOk; },
@@ -1550,6 +1551,8 @@ function mount() {
   $('#xgFab').addEventListener('click', () => { $('#xgOv').hidden = false; $('#xgFab').hidden = true; if (!R.tickets.length) setMsg('Chọn ngày rồi bấm Tải danh sách.'); });
   $('#xgClose').addEventListener('click', () => { $('#xgOv').hidden = true; $('#xgFab').hidden = false; });
   $('#xgLoad').addEventListener('click', loadDay);
+  // Ô "Giả Lập": có sẵn 16:30; xóa trống thì dùng giờ của máy. Đổi ô này chỉ vẽ lại bảng, không tự điền; trang tải lại thì ô về 16:30.
+  $('#xgNow').addEventListener('change', () => { core.App.plan.forEach(r => { r.wait = false; }); core.renderAll(); });
   // Cỡ của bảng app: nửa phải màn hình (mặc định, để vẫn thấy HIS bên trái), toàn màn hình, hoặc thu gọn thành một thanh ở góc
   const ui = (() => { try { return JSON.parse(localStorage.getItem('xepgio-ui') || '{}'); } catch (e) { return {}; } })();
   const applyUi = () => {
