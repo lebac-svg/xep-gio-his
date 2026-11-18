@@ -12,8 +12,8 @@ const sha = f => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('
 run(process.execPath, [path.join(nguon, 'build.js')]);
 
 // 2. biên dịch lại file chạy chỉ khi mã nguồn của nó mới hơn (biên dịch lại là file đổi mã kiểm tra)
-const exe = path.join(app, 'XepGioHIS.exe'), cs = path.join(nguon, 'XepGioHIS.cs');
-if (!fs.existsSync(exe) || fs.statSync(cs).mtimeMs > fs.statSync(exe).mtimeMs) {
+const exe = path.join(app, 'XepGioHIS.exe'), cs = path.join(nguon, 'XepGioHIS.cs'), ico = path.join(nguon, 'XepGioHIS.ico');   // hình đại diện vẽ bằng ve-icon.ps1
+if (!fs.existsSync(exe) || [cs, ico].some(f => fs.statSync(f).mtimeMs > fs.statSync(exe).mtimeMs)) {
   run('cmd.exe', ['/c', path.join(nguon, 'build.cmd')]);
   console.log('Đã biên dịch lại XepGioHIS.exe');
 }

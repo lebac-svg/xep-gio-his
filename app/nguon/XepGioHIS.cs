@@ -59,6 +59,7 @@ namespace XepGioHIS
         {
             ser.MaxJsonLength = int.MaxValue;
             Text = "Xếp giờ HIS";
+            try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }   // cửa sổ dùng luôn hình đại diện đã gắn trong file chạy
             ClientSize = new Size(440, 230);
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
