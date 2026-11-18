@@ -324,7 +324,7 @@ summary { cursor: pointer; color: var(--accent); font-weight: 500; }
               <div class="scroll tall"><table id="ccWeek" class="sticky1"></table></div></div></details>
           </div>
           <div class="sec" data-pop="bk">
-            <p class="muted">Dòng "tự động" là bác sĩ khám người bệnh mới vào trong ngày. Dòng "hằng tuần" lấy từ bảng chặn giờ cố định. Thêm chặn khi người bệnh đi chẩn đoán hình ảnh, ra viện, hoặc người làm bận việc khác.</p>
+            <p class="muted">Dòng "tự động" là bác sĩ khám người bệnh mới vào trong ngày. Dòng "hằng tuần" lấy từ bảng chặn giờ cố định. Dòng "Người bệnh đi CĐHA" lấy từ HIS: chặn từ giờ thực hiện đến giờ trả kết quả của phiếu chẩn đoán hình ảnh; phiếu chưa thực hiện thì chưa có giờ. Thêm chặn tay khi người bệnh ra viện, hoặc người làm bận việc khác.</p>
             <div class="row"><button type="button" class="small" data-open="wk">Sửa bảng chặn giờ cố định theo tuần</button></div>
             <div class="scroll tall"><table id="blocks"></table></div>
             <div class="row">
@@ -627,7 +627,7 @@ function XepGioCore(H, $) {
   function defaults() {
     const seed = H.seed();
     Object.assign(S, { staff: seed.staff, groups: JSON.parse(JSON.stringify(seed.groups)), certs: JSON.parse(JSON.stringify(seed.certs)), may: JSON.parse(JSON.stringify(seed.may || {})), stamp: '', shifts: [[450, 720], [780, 990]], lead: 5, gapPerf: 1, gapBn: 5, gapMay: 1, tol: 15, newBlock: 10, spread: true, mayOff: [], mayV: 0, setup: null, wkTime: {}, wkDays: [true, true, true, true, true, true, true] });
-    D.on = seed.on || {}; D.note = {}; D.week = seed.week || {}; D.blocks = []; D.bkSeq = 0; D.wkOff = [];
+    D.on = seed.on || {}; D.note = {}; D.week = seed.week || {}; D.blocks = []; D.bkSeq = 0; D.wkOff = []; D.cdOff = [];
     const saved = H.loadSettings ? H.loadSettings() : null;
     if (saved && saved.S) Object.assign(S, saved.S);
     normMay();
@@ -705,6 +705,7 @@ function XepGioCore(H, $) {
     });
     delete S.wkBlocks; delete S.wkSeq;
     D.wkOff = (Array.isArray(D.wkOff) ? D.wkOff : []).filter(k => typeof k === 'string');
+    D.cdOff = (Array.isArray(D.cdOff) ? D.cdOff : []).filter(k => typeof k === 'string');
   }
   const wkIdx = () => { const d = new Date(String(H.runDate) + 'T00:00:00'); return isNaN(d) ? -1 : (d.getDay() + 6) % 7; };   // 0 = thứ 2 ... 6 = chủ nhật
   function wkToday() {   // các khoảng chặn cố định của ngày chạy, gom những người cùng giờ: [{ key, s, e, who }]
@@ -714,8 +715,17 @@ function XepGioCore(H, $) {
     return Array.from(map.values()).sort((a, b) => a.s - b.s || a.e - b.e);
   }
   const wkOn = g => (D.wkOff || []).indexOf(g.key) < 0;   // hôm nay có áp dụng không
+  // Giờ người bệnh đi chẩn đoán hình ảnh, lấy từ HIS (H.cdha): chặn người bệnh từ giờ thực hiện đến giờ trả kết quả.
+  // Các dịch vụ cùng người, cùng giờ gộp thành một dòng; D.cdOff ghi những dòng người dùng bỏ chặn cho ngày chạy.
+  const cdList = () => {
+    const m = new Map();
+    (H.cdha || []).forEach(c => { if (c.s == null || c.e == null || c.e <= c.s) return; const k = c.bn + '|' + c.s + '|' + c.e, o = m.get(k); if (o) { if (c.ten && o.ten.indexOf(c.ten) < 0) o.ten.push(c.ten); } else m.set(k, { key: k, bn: c.bn, s: c.s, e: c.e, ten: c.ten ? [c.ten] : [] }); });
+    return Array.from(m.values()).sort((a, b) => a.s - b.s);
+  };
+  const cdOn = c => (D.cdOff || []).indexOf(c.key) < 0;
   const blocksEng = () => D.blocks.map(b => ({ kind: b.kind === 'perf' ? 'perf' : 'bn', who: b.who, s: b.s, e: b.kind === 'rv' ? 1440 : b.e, note: b.note }))
-    .concat(wkToday().filter(wkOn).reduce((a, g) => a.concat(g.who.map(id => ({ kind: 'perf', who: id, s: g.s, e: g.e, note: 'Giờ chặn cố định theo tuần' }))), []));
+    .concat(wkToday().filter(wkOn).reduce((a, g) => a.concat(g.who.map(id => ({ kind: 'perf', who: id, s: g.s, e: g.e, note: 'Giờ chặn cố định theo tuần' }))), []))
+    .concat(cdList().filter(cdOn).map(c => ({ kind: 'bn', who: c.bn, s: c.s, e: c.e, note: 'Người bệnh đi chẩn đoán hình ảnh' + (c.ten.length ? ': ' + c.ten.join(', ') : '') })));
   function autoBlocks() {   // người bệnh vào viện trong ngày: chặn bác sĩ chỉ định của người đó
     D.blocks = D.blocks.filter(b => !b.auto);
     H.pats.forEach(p => { if (p.vao != null && p.bsId) D.blocks.push({ id: ++D.bkSeq, kind: 'perf', who: p.bsId, s: p.vao, e: p.vao + S.newBlock, note: 'Khám ' + p.ten + ' mới vào lúc ' + hm(p.vao), auto: true }); });
@@ -850,6 +860,15 @@ function XepGioCore(H, $) {
   async function runFill(scope, limit, auto) {
     if (App.running || !H.canFill) return;
     if (!auto) App.autoStop = false;   // người dùng tự bấm thì cho tự điền chạy lại
+    if (H.cdhaRefresh && !App.running && Array.from(App.plan.values()).some(r => r.status === 'planned' && r.e <= H.now())) {
+      let fresh = false; try { fresh = await H.cdhaRefresh(); } catch (e) {}
+      if (fresh) {
+        const hit = new Set(); X.check(curRows(), staffEng(), cfg(), blocksEng()).forEach(c => { if (c.type === 'bblock') c.ids.forEach(id => { const t = byId(id), p = App.plan.get(id); if (t && p && p.status === 'planned' && t.tt !== 3) hit.add(t.bn); }); });
+        if (hit.size) buildPlan(hit);
+        App.conflicts = null;
+        log('Đã đọc lại phiếu chẩn đoán hình ảnh từ HIS: có giờ mới.' + (hit.size ? ' Các ca chưa điền của ' + hit.size + ' người bệnh bị trùng giờ đã được xếp lại trước khi điền.' : ' Không ca chưa điền nào bị trùng.'));
+      }
+    }
     const now = H.now();
     const all = Array.from(App.plan.values()).filter(r => r.status === 'planned' && (!scope || scope.has(byId(r.id).bn))).sort((a, b) => a.s - b.s);
     all.forEach(r => { r.wait = r.e > now; });   // chỉ điền ca đã qua giờ kết thúc
@@ -1033,12 +1052,13 @@ function XepGioCore(H, $) {
   }
   function renderBlocks() {
     const kindName = b => b.auto ? 'Bác sĩ khám người bệnh mới' : b.kind === 'perf' ? 'Chặn người làm' : b.kind === 'rv' ? 'Ra viện, xử trí' : 'Chặn người bệnh';
-    const wk = wkToday();
+    const wk = wkToday(), cd = cdList();
     $('#blocks').innerHTML = '<thead><tr><th>Loại</th><th>Ai</th><th>Từ</th><th>Đến</th><th></th></tr></thead><tbody>' +
+      cd.map(c => { const on = cdOn(c); return `<tr${on ? '' : ' class="off"'}><td>Người bệnh đi CĐHA <span class="tag">tự động</span></td><td class="wrapcell">${esc((H.pats.get(c.bn) || {}).ten || c.bn)}${c.ten.length ? '<span class="sub">' + esc(c.ten.join(', ')) + '</span>' : ''}${on ? '' : ' · đã bỏ chặn'}</td><td>${hm(c.s)}</td><td>${c.e >= 1440 ? 'hết ngày' : hm(c.e)}</td><td><button type="button" class="small" data-cdoff="${esc(c.key)}">${on ? 'Bỏ chặn' : 'Dùng lại'}</button></td></tr>`; }).join('') +
       wk.map(g => { const on = wkOn(g), names = g.who.map(staffName).join(', '); return `<tr${on ? '' : ' class="off"'}><td>Chặn người làm <span class="tag">hằng tuần</span></td><td class="wrapcell">${esc(g.who.length > 2 ? g.who.length + ' người: ' + names : names)}${on ? '' : ' · hôm nay không áp dụng'}</td><td>${hm(g.s)}</td><td>${hm(g.e)}</td><td><button type="button" class="small" data-wkoff="${g.key}">${on ? 'Bỏ hôm nay' : 'Dùng lại'}</button></td></tr>`; }).join('') +
       (D.blocks.length ? D.blocks.slice().sort((a, b) => a.s - b.s).map(b => `<tr><td>${kindName(b)}${b.auto ? ' <span class="tag">tự động</span>' : ''}</td>` +
         `<td>${esc(b.kind === 'perf' ? staffName(b.who) : (H.pats.get(b.who) || {}).ten || b.who)}</td><td>${hm(b.s)}</td><td>${b.kind === 'rv' ? 'hết ngày' : hm(b.e)}</td><td><button type="button" class="small" data-delbk="${b.id}">Xóa</button></td></tr>`).join('')
-        : wk.length ? '' : '<tr><td colspan="5" class="empty">Chưa có giờ chặn nào.</td></tr>') + '</tbody>';
+        : wk.length || cd.length ? '' : '<tr><td colspan="5" class="empty">Chưa có giờ chặn nào.</td></tr>') + '</tbody>';
     // Ô gõ tên: gõ một phần tên, có dấu hay không dấu đều được, danh sách chỉ còn những người khớp
     const kind = $('#bkKind').value, cur = $('#bkWho').value, q = fold($('#bkFind').value.trim());
     const opts = (kind === 'perf' ? S.staff.map(s => [s.id, s.ten, s.ten + ' ' + (s.user || '')]) : Array.from(H.pats.values()).map(p => [p.bn, p.ten + (p.maBA ? ' · ' + p.maBA : ''), p.ten + ' ' + (p.maBA || '')]))
@@ -1059,7 +1079,7 @@ function XepGioCore(H, $) {
     const glAll = goList(true).length;
     $('#goInfo').textContent = !H.canGo ? `Có ${sao} ca đang xanh trên HIS. Bản này chưa gỡ xanh.` : sao ? `Có ${sao} ca đang xanh từ trước lượt chạy này. Gỡ xanh để biết đúng những thủ thuật cần chạy.` : glAll ? 'Không còn phiếu xanh do sao phiếu. Muốn chạy lại cả ngày thì bấm Gỡ xanh để gỡ cả các phiếu app đã điền.' : 'Không còn phiếu xanh do sao phiếu.';
     const on = S.staff.map(st => D.on[st.id]), n = k => on.filter(k).length;
-    $('#ccInfo').textContent = `Chấm công: ${n(o => o[0] && o[1])} người cả ngày, ${n(o => o[0] && !o[1])} sáng, ${n(o => !o[0] && o[1])} chiều, ${n(o => !o[0] && !o[1])} nghỉ. Chặn giờ: ${D.blocks.length + wkToday().filter(wkOn).length}.`;
+    $('#ccInfo').textContent = `Chấm công: ${n(o => o[0] && o[1])} người cả ngày, ${n(o => o[0] && !o[1])} sáng, ${n(o => !o[0] && o[1])} chiều, ${n(o => !o[0] && !o[1])} nghỉ. Chặn giờ: ${D.blocks.length + wkToday().filter(wkOn).length + cdList().filter(cdOn).length}.`;
     $('#btnGoAll').disabled = App.running || !glAll || !H.canGo;
     $('#btnPlan').disabled = App.running || !H.tickets.length; $('#btnFill').disabled = App.running || !planned || !H.canFill; $('#btnStop').disabled = !App.running;
     ['#btnCheck2', '#btnFix2', '#btnRunSel'].forEach(s => { $(s).disabled = App.running || !H.tickets.length; });
@@ -1386,6 +1406,8 @@ function XepGioCore(H, $) {
   $('#blocks').addEventListener('click', e => {
     const w = e.target.dataset.wkoff;
     if (w) { D.wkOff = wkOn({ key: w }) ? D.wkOff.concat([w]) : D.wkOff.filter(x => x !== w); dirty(); return; }
+    const c = e.target.dataset.cdoff;
+    if (c) { D.cdOff = cdOn({ key: c }) ? (D.cdOff || []).concat([c]) : D.cdOff.filter(x => x !== c); dirty(); return; }
     const id = e.target.dataset.delbk; if (!id) return; D.blocks = D.blocks.filter(b => b.id !== +id); dirty();
   });
   $('#plan').addEventListener('change', e => { const b = e.target.dataset.selbn; if (!b) return; if (e.target.checked) App.sel.add(b); else App.sel.delete(b); selUi(); });
@@ -1710,7 +1732,7 @@ $('#btnReset').addEventListener('click', () => { if (!core.App.running) start(tr
 function start(again) {
   HIS.now = X.toMin($('#nowInput').value) || 725;
   genData(); core.boot(false);
-  core.D.blocks.push({ id: ++core.D.bkSeq, kind: 'bn', who: 'bn3', s: 480, e: 490, note: 'Chụp X-quang (dòng ví dụ)', auto: false });
+  H.cdha = [{ bn: 'bn3', s: 480, e: 492, ten: 'Chụp X-quang cột sống thắt lưng' }, { bn: 'bn3', s: 480, e: 492, ten: 'Chụp X-quang khớp gối' }, { bn: 'bn8', s: 545, e: 550, ten: 'Siêu âm ổ bụng' }, { bn: 'bn14', s: 850, e: 858, ten: 'Đo mật độ xương' }];   // ví dụ: giờ đi chẩn đoán hình ảnh
   core.S.staff.slice(0, 4).forEach(p => { core.S.wkTime[p.id] = '07:30-07:45'; });   // ví dụ giờ chặn cố định
   renderHis(); core.renderAll();
   core.log((again ? 'Đã tạo lại dữ liệu giả. ' : '') + `Đã tải danh sách ngày 17/11/2026 từ HIS mô phỏng: ${HIS.tickets.length} phiếu, ${Array.from(HIS.pats.values()).filter(p => p.vao != null).length} người bệnh mới vào trong ngày.`);

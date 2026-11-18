@@ -6,7 +6,7 @@ if (window.top !== window) return;                           // chỉ gắn ở 
 if (window.__xepgio) return;                                 // đã gắn rồi thì thôi
 const cfg0 = window.__xepgioCfg || {};
 if (cfg0.host && location.hostname !== cfg0.host) return;    // chỉ chạy trên đúng địa chỉ HIS đã khai
-window.__xepgio = { version: '0.33' };
+window.__xepgio = { version: '0.34' };
 
 /*@ENGINE*/
 /*@CORE*/
@@ -77,7 +77,6 @@ shadow.innerHTML = '<style>' + CSS + `
       <h2>Xếp giờ thủ thuật</h2>
       <span class="muted" id="xgMsg"></span>
       <label for="xgDate">Ngày <input type="date" id="xgDate"></label>
-      <label for="xgNow">Giả Lập <input type="time" id="xgNow" value="16:30"></label>
       <button type="button" class="primary" id="xgLoad">Tải danh sách</button>
       <button type="button" id="xgSize">Mở rộng</button>
       <button type="button" id="xgMini">Thu gọn</button>
@@ -102,8 +101,10 @@ const onOf = lv => [[true, true], [true, false], [false, true], [false, false]][
 const lvOf = on => on[0] && on[1] ? 0 : on[0] ? 1 : on[1] ? 2 : 3;
 
 const H = {
-  get tickets() { return R.tickets; }, get pats() { return R.pats; }, get missed() { return R.missed || []; },
-  now() { const t = iso(new Date()); if (R.date < t) return 1440; if (R.date > t) return -1; const f = X.toMin($('#xgNow').value); if (f != null) return f; const d = new Date(); return d.getHours() * 60 + d.getMinutes(); },
+  get tickets() { return R.tickets; }, get pats() { return R.pats; }, get missed() { return R.missed || []; }, get cdha() { return (R.cdha || {}).list || []; },
+  // Đọc lại giờ chẩn đoán hình ảnh của ngày chạy; trả về true nếu có giờ khác lần đọc trước
+  async cdhaRefresh() { if (!R.pats || !R.pats.size) return false; const old = JSON.stringify(H.cdha); R.cdha = await fetchCdha(gridBase(), R.date, R.pats); return JSON.stringify(H.cdha) !== old; },
+  now() { const t = iso(new Date()); if (R.date < t) return 1440; if (R.date > t) return -1; const d = new Date(); return d.getHours() * 60 + d.getMinutes(); },
   get dateLabel() { return vn(R.date); }, get runDate() { return R.date; }, canGo: true, canFill: true, strict: true,
   // Tự điền dần chỉ mở sau khi đã có ít nhất một ca được điền thành công trên máy này
   get noAuto() { return !store().autoOk; },
@@ -121,7 +122,7 @@ const H = {
   },
   loadSettings() {    // cài đặt dùng chung mọi ngày; chấm công lưu theo từng ngày để đánh trước được
     const st = store(), S = st.S || null, att = st.att || {}, day = (st.days || {})[R.date] || {};
-    const D = { on: {}, week: {}, note: day.note || {}, blocks: (day.blocks || []).slice(), wkOff: (day.wkOff || []).slice(), bkSeq: (day.blocks || []).reduce((m, b) => Math.max(m, b.id), 0) };
+    const D = { on: {}, week: {}, note: day.note || {}, blocks: (day.blocks || []).slice(), wkOff: (day.wkOff || []).slice(), cdOff: (day.cdOff || []).slice(), bkSeq: (day.blocks || []).reduce((m, b) => Math.max(m, b.id), 0) };
     ((S && S.staff) || []).forEach(p => { D.week[p.id] = weekDates().map(d => (att[d] && att[d][p.id] != null) ? att[d][p.id] : 0); D.on[p.id] = onOf(D.week[p.id][1]); });
     return { S, D };
   },
@@ -129,7 +130,7 @@ const H = {
     try {
       const st = store(); st.S = S; st.att = st.att || {}; st.days = st.days || {};
       weekDates().forEach((d, i) => { st.att[d] = st.att[d] || {}; S.staff.forEach(p => { st.att[d][p.id] = i === 1 ? lvOf(D.on[p.id] || [true, true]) : (D.week[p.id] || [])[i] || 0; }); });
-      st.days[R.date] = Object.assign({}, st.days[R.date], { note: D.note, blocks: D.blocks.filter(b => !b.auto), wkOff: D.wkOff || [] });
+      st.days[R.date] = Object.assign({}, st.days[R.date], { note: D.note, blocks: D.blocks.filter(b => !b.auto), wkOff: D.wkOff || [], cdOff: D.cdOff || [] });
       localStorage.setItem(KEY, JSON.stringify(st));
     } catch (e) {}
   },
@@ -358,6 +359,45 @@ async function query(base, sql, value, rows) {
   let js; try { js = await rs.json(); } catch (e) { throw new Error('HIS không trả về dữ liệu. Có thể phiên đăng nhập đã hết, hãy đăng nhập lại.'); }
   return js.rows || [];
 }
+// Truy vấn có nhiều tham số rời (dạng mà các thẻ trong bệnh án nội trú dùng)
+async function queryN(base, sql, vals, rows) {
+  const pd = { func: 'ajaxExecuteQueryPaging', uuid: base.uuid, params: [sql], options: vals.map((v, i) => ({ name: '[' + i + ']', value: String(v == null ? '' : v) })) };
+  const rs = await fetch(base.rest + '?postData=' + encodeURIComponent(JSON.stringify(pd)) + '&_search=false&nd=' + Date.now() + '&rows=' + (rows || 200) + '&page=1&sidx=&sord=asc', { credentials: 'same-origin' });
+  return (await rs.json()).rows || [];
+}
+// Giờ người bệnh đi chẩn đoán hình ảnh trong ngày chạy. Đọc đúng hai truy vấn mà thẻ CĐHA của bệnh án nội trú dùng:
+// NT.024.DSPHIEUCLS (danh sách phiếu của một người bệnh, loại 2 = CĐHA) và NT.024.2 (dịch vụ của một phiếu, có giờ thực hiện và giờ trả kết quả).
+// Chỉ đọc, không ghi gì. Trả về { list: [{ bn, s, e, ten }], wait: số dịch vụ của ngày chạy chưa có giờ thực hiện, err: số người bệnh không đọc được }.
+const LNMBP_CDHA = 2;
+async function fetchCdha(base, date, pats) {
+  const d = vn(date), next = vn(addDays(date, 1)), list = [], todo = Array.from(pats.values()).filter(p => p.kb);
+  let wait = 0, err = 0, i = 0;
+  const day = v => String(v || '').slice(0, 10);
+  const worker = async () => {
+    while (i < todo.length) {
+      const p = todo[i++];
+      try {
+        const phieu = (await queryN(base, 'NT.024.DSPHIEUCLS', [p.kb, p.bn, LNMBP_CDHA, p.hs || ''])).filter(x => day(x.NGAYMAUBENHPHAM) === d || day(x.NGAYMAUBENHPHAM_HOANTHANH) === d || day(x.NGAYMAUBENHPHAM_SUDUNG) === d);
+        for (const ph of phieu) {
+          const dv = await queryN(base, 'NT.024.2', [ph.MAUBENHPHAMID], 100);
+          dv.forEach(x => {
+            const tra = x.THOIGIANTRAKETQUA1 || x.THOIGIANTRAKETQUA || '';
+            if (day(x.TGTHUCHIEN) !== d) { if (!x.TGTHUCHIEN && day(ph.NGAYMAUBENHPHAM) === d) wait++; return; }   // chưa thực hiện, hoặc thực hiện vào ngày khác
+            const s = timeOf(x.TGTHUCHIEN); let e = day(tra) === d ? timeOf(tra) : null;
+            if (e == null && (!tra || day(tra) === next)) e = 1440;   // đã thực hiện nhưng chưa trả kết quả (hoặc trả vào hôm sau): chặn tới hết ngày, lần đọc sau sẽ có giờ đúng
+            if (s == null || e == null) return;
+            if (e <= s) e = s + 1;
+            list.push({ bn: p.bn, s, e, ten: String(x.TENDICHVU || '').trim() });
+          });
+        }
+      } catch (e) { err++; }
+    }
+  };
+  await Promise.all([1, 2, 3, 4, 5].map(worker));
+  return { list, wait, err };
+}
+const cdhaNote = c => !c ? '' : 'Chẩn đoán hình ảnh ngày ' + vn(R.date) + ': ' + (c.list.length ? c.list.length + ' dịch vụ của ' + new Set(c.list.map(x => x.bn)).size + ' người bệnh đã có giờ thực hiện, app tự chặn giờ đó' : 'chưa có dịch vụ nào có giờ thực hiện') +
+  (c.wait ? '; ' + c.wait + ' dịch vụ chỉ định hôm nay chưa thực hiện nên chưa có giờ để chặn' : '') + (c.err ? '; không đọc được phiếu của ' + c.err + ' người bệnh' : '') + '.';
 const setMsg = s => { $('#xgMsg').textContent = s; };
 
 // Danh sách tài khoản nhân viên, lấy bằng đúng truy vấn mà ô "Người thực hiện" của form Cập nhật PTTT dùng (bệnh viện này cấu hình là PTTT.LOAD_USERID).
@@ -375,7 +415,7 @@ const fold = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').repla
 async function refreshDay() {   // đọc lại ngày đang chạy từ HIS mà không xóa bảng giờ đang có trên app
   if (R.loading || core.App.running || !R.tickets.length) return;
   R.loading = true; $('#xgLoad').disabled = true;
-  try { const x = await fetchDay(R.date); R.tickets = x.tickets; R.pats = x.pats; core.changed(); setMsg('Ngày ' + vn(R.date) + ': ' + x.tickets.length + ' thủ thuật'); }
+  try { const x = await fetchDay(R.date); R.tickets = x.tickets; R.pats = x.pats; if (x.cdha) R.cdha = x.cdha; core.changed(); setMsg('Ngày ' + vn(R.date) + ': ' + x.tickets.length + ' thủ thuật'); }
   catch (e) { setMsg(e.message || String(e)); }
   R.loading = false; $('#xgLoad').disabled = false;
 }
@@ -386,7 +426,7 @@ async function loadDay() {
   R.loading = true; $('#xgLoad').disabled = true;
   try {
     const d = vn(date), got = await fetchDay(date), tickets = got.tickets, pats = got.pats, list = got.list;
-    R.tickets = tickets; R.pats = pats; R.date = date;
+    R.tickets = tickets; R.pats = pats; R.date = date; R.cdha = got.cdha;
     core.boot(false);
     const learned = learn(); core.persist(); core.renderAll();
     learned.forEach(m => core.log(m));
@@ -394,6 +434,7 @@ async function loadDay() {
     const raN = Array.from(pats.values()).filter(p => p.ra).length, kinds = {};
     pats.forEach(p => { const k = p.ttkb || 'trống'; kinds[k] = (kinds[k] || 0) + 1; });
     core.log('Trạng thái người bệnh trên HIS: ' + Object.keys(kinds).map(k => '"' + k + '" ' + kinds[k] + ' người').join(', ') + '. ' + (raN ? raN + ' người đã ra viện: ca xanh của họ được giữ nguyên, không tự xếp lại.' : 'App không thấy ai đã ra viện.'));
+    core.log(got.cdha ? cdhaNote(got.cdha) : 'Chưa đọc được phiếu chẩn đoán hình ảnh từ HIS, nên app chưa tự chặn giờ người bệnh đi CĐHA.');
     const none = tickets.filter(t => !core.groupOf(t.ten));
     if (none.length) core.log('Có ' + none.length + ' ca thuộc thủ thuật chưa có quy tắc thời gian: ' + Array.from(new Set(none.map(t => t.ten))).join('; '));
     core.runCheck();
@@ -435,7 +476,7 @@ async function fetchDay(date) {
         try {
           const det = await query(base, 'NT.024.3.VS2', { MAUBENHPHAMID: String(tk.MAUBENHPHAMID), TRANGTHAI_CBOPHIEU: '' }, 100);
           const bn = String(tk.BENHNHANID);
-          if (!pats.has(bn)) { const v = tk.THOIGIANVAOVIEN || ''; pats.set(bn, { bn, ten: tk.TENBENHNHAN, maBA: tk.MABENHAN, bsId: tk.NGUOITAO || null, vao: v.slice(0, 10) === d ? timeOf(v) : null, ra: raVien(tk.TRANGTHAIKHAMBENH), ttkb: ttkbOf(tk.TRANGTHAIKHAMBENH) }); }
+          if (!pats.has(bn)) { const v = tk.THOIGIANVAOVIEN || ''; pats.set(bn, { bn, kb: tk.KHAMBENHID, hs: tk.HOSOBENHANID, ten: tk.TENBENHNHAN, maBA: tk.MABENHAN, bsId: tk.NGUOITAO || null, vao: v.slice(0, 10) === d ? timeOf(v) : null, ra: raVien(tk.TRANGTHAIKHAMBENH), ttkb: ttkbOf(tk.TRANGTHAIKHAMBENH) }); }
           det.forEach(x => {
             let s = timeOf(x.NGAYPHAUTHUATTHUTHUAT), e = timeOf(x.KETTHUCPTTT);
             if (s == null || e == null || e <= s) { s = null; e = null; }
@@ -450,7 +491,9 @@ async function fetchDay(date) {
     };
     await Promise.all([1, 2, 3, 4, 5].map(worker));
     if (err) throw new Error('Có ' + err + ' phiếu không tải được chi tiết. Bấm Tải danh sách lần nữa.');
-    return { tickets, pats, list };
+    let cdha = null;
+    try { setMsg('Đang đọc phiếu chẩn đoán hình ảnh...'); cdha = await fetchCdha(base, date, pats); } catch (e) { cdha = null; }   // không đọc được thì vẫn chạy, chỉ là không tự chặn giờ CĐHA
+    return { tickets, pats, list, cdha };
   }
 }
 
@@ -489,8 +532,6 @@ function mount() {
   $('#xgFab').addEventListener('click', () => { $('#xgOv').hidden = false; $('#xgFab').hidden = true; if (!R.tickets.length) setMsg('Chọn ngày rồi bấm Tải danh sách.'); });
   $('#xgClose').addEventListener('click', () => { $('#xgOv').hidden = true; $('#xgFab').hidden = false; });
   $('#xgLoad').addEventListener('click', loadDay);
-  // Ô "Giả Lập": có sẵn 16:30; xóa trống thì dùng giờ của máy. Đổi ô này chỉ vẽ lại bảng, không tự điền; trang tải lại thì ô về 16:30.
-  $('#xgNow').addEventListener('change', () => { core.App.plan.forEach(r => { r.wait = false; }); core.renderAll(); });
   // Cỡ của bảng app: nửa phải màn hình (mặc định, để vẫn thấy HIS bên trái), toàn màn hình, hoặc thu gọn thành một thanh ở góc
   const ui = (() => { try { return JSON.parse(localStorage.getItem('xepgio-ui') || '{}'); } catch (e) { return {}; } })();
   const applyUi = () => {
