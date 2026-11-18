@@ -6,7 +6,7 @@ if (window.top !== window) return;                           // chỉ gắn ở 
 if (window.__xepgio) return;                                 // đã gắn rồi thì thôi
 const cfg0 = window.__xepgioCfg || {};
 if (cfg0.host && location.hostname !== cfg0.host) return;    // chỉ chạy trên đúng địa chỉ HIS đã khai
-window.__xepgio = { version: '0.31' };
+window.__xepgio = { version: '0.32' };
 
 /*@ENGINE*/
 /*@CORE*/
@@ -339,6 +339,7 @@ const closeAlert = () => { const b = document.getElementById('alertify-ok'); if 
 pruneStore();
 const core = XepGioCore(H, $);
 H.sweepForms = sweepForms;
+H.ver = window.__xepgio.version;
 H.onPop = k => { $('#xgOv').classList.toggle('wide', k === 'bang'); };   // Bảng giờ cần chỗ rộng: mở thì khung app giãn hết cửa sổ, đóng thì về cỡ cũ
 
 // Địa chỉ và bộ lọc lấy từ chính lưới phiếu của màn Quản lý phẫu thuật thủ thuật (khoa, phòng thực hiện, mã phiên)

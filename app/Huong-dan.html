@@ -26,7 +26,7 @@
 <body>
 <main>
   <h1>Hướng dẫn dùng app Xếp giờ HIS</h1>
-  <p class="muted">Bản 0.31, viết ngày 18/11/2026. Dùng cho màn Nội trú › Quản lý phẫu thuật thủ thuật của VNPT HIS.</p>
+  <p class="muted">Bản 0.32, viết ngày 18/11/2026. Dùng cho màn Nội trú › Quản lý phẫu thuật thủ thuật của VNPT HIS.</p>
   <div class="note">Lúc viết hướng dẫn này, việc bấm "Lưu đóng" thật trên HIS chưa được thử. Lần điền đầu tiên hãy chọn "Điền thử 1 ca" và tự kiểm tra phiếu đó trên HIS trước khi điền cả loạt.</div>
 
   <h2>Thư mục app gồm gì</h2>
@@ -66,8 +66,8 @@
     <li>Bước 1: nếu có phiếu xanh do sao phiếu, bấm <b class="k">Gỡ xanh</b> và xác nhận. Chỉ làm bước này trước khi cập nhật thủ thuật của ngày. Muốn chạy lại cả ngày sau khi app đã điền: bấm Gỡ xanh rồi chọn <b class="k">Chạy lại cả ngày</b>, sau đó Xếp giờ và Điền vào HIS lại từ đầu. Phiếu nào HIS không cho gỡ, và phiếu của người bệnh đã ra viện, được để nguyên.</li>
     <li>Bước 2: bấm <b class="k">Xếp giờ</b>, rồi bấm vào ô "Dự kiến, chờ điền" để mở <b class="k">Bảng giờ</b> ngay bên dưới và duyệt. Ca báo đỏ có ghi lý do. Ca đã xanh trên HIS mà có lỗi (trùng người làm, người bệnh hoặc máy, sai buổi làm, người làm nghỉ hoặc không có chứng chỉ, thời gian ngắn hơn quy định) cũng được xếp giờ mới trong đúng buổi đã làm và hiện là "Xếp lại, sẽ ghi đè giờ cũ". Ca xanh không lỗi giữ nguyên, trừ khi còn ca kẹt vì hết chỗ: lúc đó app xem lại cả giờ của các ca đã xanh và chỉ dời những ca cần dời để lấy chỗ. Ca nào vẫn không xếp được thì hiện đỏ kèm lý do. Ca xanh của người bệnh đã ra viện cũng giữ nguyên dù có lỗi: app nhận biết theo trạng thái trên HIS, hoặc theo giờ chặn "Ra viện, xử trí" bạn thêm cho người đó. Ca xanh nào HIS không cho ghi lại thì app ghi vào nhật ký, giữ nguyên và chạy tiếp các ca khác.</li>
     <li>Bước 3: bấm <b class="k">Điền vào HIS</b> và xác nhận. App chỉ điền các ca đã qua giờ kết thúc.</li>
-    <li>Xếp giờ xong app tự soát trùng; số lỗi hiện ở ô "Lỗi và cảnh báo trùng". Còn lỗi thì bấm vào ô đó để mở <b class="k">Lọc trùng</b>, bấm <b class="k">Tự sắp xếp lại</b>, rồi bấm Điền vào HIS để ghi giờ mới.</li>
-    <li><b class="k">Bảng giờ</b> là một bảng cho mọi thủ thuật của ngày. Bấm <b class="k">Mở bảng giờ</b> ở cuối màn chính (hoặc chọn Bảng giờ trong Chức năng) để mở thành cửa sổ nổi, bấm Xong để đóng. Chọn cách xem: theo giờ, theo người bệnh, theo người làm (có tổng số ca và số phút), hoặc thanh thời gian. Ô tìm và hai ô lọc dùng chung cho mọi cách xem. Các ô số liệu ở đầu màn chính bấm được, dẫn thẳng tới đúng nhóm ca.</li>
+    <li>Xếp giờ xong app tự soát trùng; số lỗi hiện ở ô "Lỗi và cảnh báo trùng". Còn lỗi thì bấm vào ô đó để mở <b class="k">Lọc trùng</b>, bấm <b class="k">Tự sắp xếp lại</b>, rồi bấm Điền vào HIS để ghi giờ mới. Mỗi lỗi có một câu gợi ý cách gỡ và nút <b class="k">Xem trong bảng giờ</b>: bấm là Bảng giờ mở đúng người bệnh có ca lỗi, ca đó được tô đỏ.</li>
+    <li><b class="k">Bảng giờ</b> là một bảng cho mọi thủ thuật của ngày. Bấm <b class="k">Mở bảng giờ</b> ở cuối màn chính (hoặc chọn Bảng giờ trong Chức năng) để mở thành cửa sổ nổi, bấm Xong để đóng. Khi cuộn bảng, tên cột, ô tìm và nút Chạy riêng vẫn đứng yên ở trên. Ở cách xem theo người bệnh, mỗi người là một dòng tóm tắt; bấm vào dòng để mở các ca của người đó, người có ca cần xem lại thì mở sẵn, nút <b class="k">Mở hết</b> hoặc <b class="k">Thu hết</b> áp dụng cho cả bảng. Chọn cách xem: theo giờ, theo người bệnh, theo người làm (có tổng số ca và số phút), hoặc thanh thời gian. Ô tìm và hai ô lọc dùng chung cho mọi cách xem. Các ô số liệu ở đầu màn chính bấm được, dẫn thẳng tới đúng nhóm ca.</li>
   </ol>
 
   <h2>Buổi chiều và cuối tuần</h2>
@@ -82,6 +82,7 @@
   <h2>Khi app dừng hoặc báo lỗi</h2>
   <table>
     <tr><th>Hiện tượng</th><th>Cách xử lý</th></tr>
+    <tr><td>Cần gửi nhật ký cho người hỗ trợ</td><td>Bấm <b class="k">Sao chép nhật ký</b> ở góc phải mục Nhật ký rồi dán vào tin nhắn. Tên người bệnh, mã bệnh án và số phiếu được che trước khi chép. Dòng tô đỏ trong nhật ký là việc chưa thành, cần xem.</td></tr>
     <tr><td>Nhật ký ghi "HIS từ chối" kèm một câu thông báo</td><td>Đó là nguyên văn thông báo của HIS cho ca đó. App bỏ qua ca đó và điền tiếp các ca khác; ca bị từ chối hiện đỏ trong Bảng giờ kèm lý do. Sửa theo thông báo rồi bấm Xếp giờ và Điền vào HIS để thử lại. Năm ca liên tiếp bị từ chối thì app dừng, thường là do phiên đăng nhập đã hết.</td></tr>
     <tr><td>"HIS không trả về dữ liệu" hoặc trang về màn đăng nhập</td><td>Phiên đăng nhập đã hết hoặc tài khoản được đăng nhập ở nơi khác. Đăng nhập lại, tải danh sách, bấm Điền vào HIS. Bảng giờ đã xếp được giữ lại.</td></tr>
     <tr><td>"chưa có tài khoản HIS của người làm"</td><td>Bấm Chấm công, rồi Cập nhật danh sách, gõ tên người đó và chọn đúng tài khoản.</td></tr>
