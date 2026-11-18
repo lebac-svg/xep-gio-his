@@ -6,7 +6,7 @@ if (window.top !== window) return;                           // chỉ gắn ở 
 if (window.__xepgio) return;                                 // đã gắn rồi thì thôi
 const cfg0 = window.__xepgioCfg || {};
 if (cfg0.host && location.hostname !== cfg0.host) return;    // chỉ chạy trên đúng địa chỉ HIS đã khai
-window.__xepgio = { version: '0.35' };
+window.__xepgio = { version: '0.36' };
 
 const X = (function () {
   const toMin = s => { const m = /(\d{1,2}):(\d{2})/.exec(s || ''); return m ? +m[1] * 60 + +m[2] : null; };
@@ -1185,7 +1185,7 @@ const weekDates = () => [-1, 0, 1, 2, 3, 4, 5].map(n => addDays(R.date, n));
 const onOf = lv => [[true, true], [true, false], [false, true], [false, false]][lv] || [true, true];
 const lvOf = on => on[0] && on[1] ? 0 : on[0] ? 1 : on[1] ? 2 : 3;
 // Ô "Giả Lập" ở thanh trên cùng: để trống thì app theo giờ của máy; gõ giờ thì app coi bây giờ là giờ đó khi xét ca nào được điền.
-// Ô luôn mở ra trống, không lưu lại. Ca được điền trước giờ kết thúc thật được đếm và ghi vào nhật ký.
+// Giờ đã gõ được nhớ riêng trên từng máy (trong xepgio-ui); máy chưa ai gõ thì ô trống. Ca được điền trước giờ kết thúc thật được đếm và ghi vào nhật ký.
 const clockMin = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
 const simMin = () => X.toMin($('#xgNow').value);
 
@@ -1224,7 +1224,8 @@ const H = {
     } catch (e) {}
   },
   /* ----- điền giờ: app mở form "Cập nhật PTTT" của HIS cho từng ca, điền rồi bấm "Lưu đóng", đúng như làm tay ----- */
-  fillWarn: 'App mở form "Cập nhật PTTT" của HIS cho từng ca, điền giờ, người làm, mã máy rồi bấm "Lưu đóng". Cảnh báo trùng của HIS được bấm Đồng ý và ghi vào nhật ký. Ca nào HIS từ chối thì app ghi lý do, bỏ qua ca đó và điền tiếp ca sau; 5 ca liên tiếp bị từ chối thì dừng.',
+  // Khi ô Giả Lập đang đặt giờ muộn hơn giờ máy, hộp xác nhận nói rõ điều đó trước khi điền
+  get fillWarn() { const f = simMin(), c = clockMin(); return (R.date === iso(new Date()) && f != null && f > c ? 'Ô Giả Lập đang đặt ' + X.toHM(f) + ' trong khi giờ máy là ' + X.toHM(c) + ': ca nào kết thúc sau ' + X.toHM(c) + ' là ca chưa tới giờ thật và cũng được điền. ' : '') + 'App mở form "Cập nhật PTTT" của HIS cho từng ca, điền giờ, người làm, mã máy rồi bấm "Lưu đóng". Cảnh báo trùng của HIS được bấm Đồng ý và ghi vào nhật ký. Ca nào HIS từ chối thì app ghi lý do, bỏ qua ca đó và điền tiếp ca sau; 5 ca liên tiếp bị từ chối thì dừng.'; },
   loadFilled() { return ((store().days || {})[R.date] || {}).filled || []; },
   onFilled(ids) { try { const st = store(); st.autoOk = true; st.days = st.days || {}; st.days[R.date] = Object.assign({}, st.days[R.date], { filled: ids }); localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) {} },
   fillNote() { const n = R.swept || 0; return n ? 'Đã dọn ' + n + ' form cũ mà HIS để lại trong bộ nhớ.' : ''; },
@@ -1634,7 +1635,6 @@ function mount() {
   $('#xgFab').addEventListener('click', () => { $('#xgOv').hidden = false; $('#xgFab').hidden = true; if (!R.tickets.length) setMsg('Chọn ngày rồi bấm Tải danh sách.'); });
   $('#xgClose').addEventListener('click', () => { $('#xgOv').hidden = true; $('#xgFab').hidden = false; });
   $('#xgLoad').addEventListener('click', loadDay);
-  $('#xgNow').addEventListener('change', () => { core.App.plan.forEach(r => { r.wait = false; }); core.renderAll(); });   // đổi ô Giả Lập chỉ vẽ lại bảng, không tự điền
   // Cỡ của bảng app: nửa phải màn hình (mặc định, để vẫn thấy HIS bên trái), toàn màn hình, hoặc thu gọn thành một thanh ở góc
   const ui = (() => { try { return JSON.parse(localStorage.getItem('xepgio-ui') || '{}'); } catch (e) { return {}; } })();
   const applyUi = () => {
@@ -1645,6 +1645,9 @@ function mount() {
   $('#xgSize').addEventListener('click', () => { ui.full = !ui.full; applyUi(); core.renderAll(); });
   $('#xgMini').addEventListener('click', () => { ui.mini = !ui.mini; applyUi(); });
   applyUi();
+  // Ô Giả Lập: nhớ giờ đã gõ trên máy này để lần mở sau có sẵn; đổi ô chỉ vẽ lại bảng, không tự điền
+  if (ui.now && X.toMin(ui.now) != null) $('#xgNow').value = ui.now;
+  $('#xgNow').addEventListener('change', () => { ui.now = $('#xgNow').value || ''; applyUi(); core.App.plan.forEach(r => { r.wait = false; }); core.renderAll(); });
   // Mỗi nửa phút: ca nào vừa qua giờ kết thúc thì điền (nếu đang bật tự điền), và ghi số ca còn chờ lên tên thẻ trình duyệt
   const title0 = document.title;
   setInterval(() => {
