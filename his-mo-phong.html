@@ -57,6 +57,7 @@ p { margin: 0; }
 .seg { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--sunk); }
 .seg button { border: 0; background: none; padding: 4px 10px; border-radius: 6px; color: var(--muted); font-size: 13px; }
 .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 0 0 1px var(--line); }
+#grpStat { align-self: flex-start; }
 button.link { border: 0; background: none; padding: 6px 2px; color: var(--accent); }
 button.link:hover:not(:disabled) { text-decoration: underline; }
 details.fold { border: 1px solid var(--line); border-radius: var(--r); min-width: 0; }
@@ -294,9 +295,11 @@ summary { cursor: pointer; color: var(--accent); font-weight: 500; }
         <div class="row">
           <input type="text" id="bangSearch" placeholder="Tìm người bệnh, người làm, thủ thuật" aria-label="Tìm trong bảng giờ">
           <select id="planSt" aria-label="Lọc theo trạng thái"><option value="">Mọi trạng thái</option><option value="bad">Cần xem lại</option><option value="plan">Dự kiến, chưa điền</option><option value="his">Đã lưu trên HIS</option><option value="none">Chưa có giờ</option><option value="ext">Của khoa khác</option></select>
+          <select id="planGrp" aria-label="Lọc theo loại thủ thuật"></select>
           <select id="planPerf" aria-label="Lọc theo người làm"></select>
         </div>
       </div>
+      <div class="seg" id="grpStat" role="group" aria-label="Số ca theo loại thủ thuật, bấm để lọc" hidden></div>
       <div class="bar"><p class="muted" id="dsInfo"></p><div class="row"><button id="bnFold" type="button" class="small" hidden>Mở hết</button><button id="selClear" type="button" class="small" hidden>Bỏ tích hết</button><button id="btnRunSel" type="button" class="primary" hidden>Chạy riêng cho người đã tích</button></div></div>
       <div class="scroll fill" id="bangTable"><table id="plan"></table></div>
       <div class="col gap8" id="tlBox" hidden>
@@ -437,10 +440,12 @@ const X = (function () {
     const book = new Map();
     const get = k => { let v = book.get(k); if (!v) book.set(k, v = []); return v; };
     const bk = {
-      clash: (k, s, e, gap) => get(k).some(iv => { const g = iv[2] ? 0 : gap; return s < iv[1] + g && iv[0] < e + g; }),
-      add: (k, s, e, isBlock) => { get(k).push([s, e, isBlock ? 1 : 0]); }
+      // skipWait: không tính các khoảng chặn đang chờ (b.wait), để biết ca kẹt có phải chỉ vì khoảng chặn đó
+      clash: (k, s, e, gap, skipWait) => get(k).some(iv => { if (skipWait && iv[3]) return false; const g = iv[2] ? 0 : gap; return s < iv[1] + g && iv[0] < e + g; }),
+      add: (k, s, e, isBlock, wait) => { get(k).push([s, e, isBlock ? 1 : 0, wait ? 1 : 0]); },
+      wait: new Map()   // người bệnh -> ghi chú của khoảng chặn đang chờ (ví dụ chờ kết quả chẩn đoán hình ảnh)
     };
-    (blocks || []).forEach(b => bk.add((b.kind === 'perf' ? 'P:' : 'B:') + b.who, b.s, b.e, true));
+    (blocks || []).forEach(b => { bk.add((b.kind === 'perf' ? 'P:' : 'B:') + b.who, b.s, b.e, true, b.wait); if (b.wait && b.kind !== 'perf') bk.wait.set(b.who, b.wait); });
     return bk;
   }
 
@@ -455,7 +460,7 @@ const X = (function () {
       const a = cfg.shifts[i][0], b = cfg.shifts[i][1];
       for (let s = Math.max(a, (t.order || 0) + cfg.lead); s + t.dur <= b; s++) {
         if (!relax.perf && bk.clash('P:' + st.id, s, s + t.busy, cfg.gapPerf)) continue;
-        if (!relax.bn && bk.clash('B:' + t.bn, s, s + t.dur, cfg.gapBn)) continue;
+        if (!relax.bn && bk.clash('B:' + t.bn, s, s + t.dur, cfg.gapBn, relax.wait)) continue;
         let may = null;
         if (t.machines && !relax.may) { may = t.machines.find(m => !bk.clash('M:' + m, s, s + t.dur, cfg.gapMay)); if (!may) continue; }
         return { s, may, shift: i };
@@ -475,6 +480,8 @@ const X = (function () {
     const lastEnd = Math.max.apply(null, cfg.shifts.map(x => x[1]));
     if ((t.order || 0) + cfg.lead + t.dur > lastEnd) return 'Chỉ định lúc ' + toHM(t.order) + ', không kịp xong trước ' + toHM(lastEnd);
     const can = r => on.some(st => earliest(t, st, cfg, bk, r));
+    const w = bk.wait.get(t.bn);
+    if (w && can({ wait: true })) return w;   // bỏ riêng khoảng chặn đang chờ thì xếp được: ca kẹt vì khoảng chặn đó
     if (can({ bn: true })) return 'Người bệnh không còn khoảng trống phù hợp';
     if (can({ may: true })) return 'Máy đã kín lịch';
     if (can({ perf: true })) return 'Người làm có chứng chỉ đã kín lịch';
@@ -601,7 +608,7 @@ function XepGioCore(H, $) {
   const offKey = (g, m) => g.k + '|' + m;   // ô tích máy là của riêng từng thủ thuật
   // Cài đặt kiểu cũ: vài thủ thuật dùng chung một danh sách máy (mk) và ô tích là chung theo mã máy. Chuyển sang kiểu mới, giữ nguyên máy nào đang tích.
   function normMay() {
-    S.may = S.may || {}; S.mayOff = S.mayOff || [];
+    S.may = S.may || {}; S.mayOff = S.mayOff || []; S.mayGone = S.mayGone || [];   // mayGone: mã máy người dùng đã xóa, để không tự thêm lại khi tải danh sách hay đọc máy từ HIS
     S.groups.forEach(g => { if (g.mk && g.mk !== g.k && !(S.may[g.k] && S.may[g.k].length) && S.may[g.mk]) S.may[g.k] = S.may[g.mk].slice(); });
     S.groups.forEach(g => { g.mk = g.k; });
     if (S.mayV !== 2) { const old = S.mayOff; S.mayOff = []; S.groups.forEach(g => (S.may[g.k] || []).forEach(m => { if (old.indexOf(m) >= 0) S.mayOff.push(offKey(g, m)); })); S.mayV = 2; }
@@ -626,7 +633,7 @@ function XepGioCore(H, $) {
   }
   function defaults() {
     const seed = H.seed();
-    Object.assign(S, { staff: seed.staff, groups: JSON.parse(JSON.stringify(seed.groups)), certs: JSON.parse(JSON.stringify(seed.certs)), may: JSON.parse(JSON.stringify(seed.may || {})), stamp: '', shifts: [[450, 720], [780, 990]], lead: 5, gapPerf: 1, gapBn: 5, gapMay: 1, tol: 15, newBlock: 10, spread: true, mayOff: [], mayV: 0, setup: null, wkTime: {}, wkDays: [true, true, true, true, true, true, true] });
+    Object.assign(S, { staff: seed.staff, groups: JSON.parse(JSON.stringify(seed.groups)), certs: JSON.parse(JSON.stringify(seed.certs)), may: JSON.parse(JSON.stringify(seed.may || {})), stamp: '', shifts: [[450, 720], [780, 990]], lead: 5, gapPerf: 1, gapBn: 5, gapMay: 1, tol: 15, newBlock: 10, spread: true, mayOff: [], mayGone: [], mayV: 0, setup: null, wkTime: {}, wkDays: [true, true, true, true, true, true, true] });
     D.on = seed.on || {}; D.note = {}; D.week = seed.week || {}; D.blocks = []; D.bkSeq = 0; D.wkOff = []; D.cdOff = [];
     const saved = H.loadSettings ? H.loadSettings() : null;
     if (saved && saved.S) Object.assign(S, saved.S);
@@ -718,16 +725,18 @@ function XepGioCore(H, $) {
   // Giờ người bệnh đi chẩn đoán hình ảnh, lấy từ HIS (H.cdha): chặn người bệnh từ giờ thực hiện đến giờ trả kết quả.
   // Các dịch vụ cùng người, cùng giờ gộp thành một dòng; D.cdOff ghi những dòng người dùng bỏ chặn cho ngày chạy.
   // Dòng có khoa (c.khoa) là thủ thuật của cùng người bệnh do khoa, phòng khác đã hoàn thành trên HIS: chặn người bệnh đúng giờ đã ghi ở đó.
+  // Dòng c.open là dịch vụ đã làm nhưng HIS chưa có giờ trả kết quả: chặn tới hết ngày cho tới khi đọc được giờ trả; ca kẹt vì dòng này được ghi chú "Chờ CĐHA".
   const cdList = () => {
     const m = new Map();
-    (H.cdha || []).forEach(c => { if (c.s == null || c.e == null || c.e <= c.s) return; const k = (c.khoa != null ? 'tt|' : '') + c.bn + '|' + c.s + '|' + c.e, o = m.get(k); if (o) { if (c.ten && o.ten.indexOf(c.ten) < 0) o.ten.push(c.ten); } else m.set(k, { key: k, bn: c.bn, s: c.s, e: c.e, khoa: c.khoa, ten: c.ten ? [c.ten] : [] }); });
+    (H.cdha || []).forEach(c => { if (c.s == null || c.e == null || c.e <= c.s) return; const k = (c.khoa != null ? 'tt|' : '') + c.bn + '|' + c.s + '|' + c.e, o = m.get(k); if (o) { if (c.ten && o.ten.indexOf(c.ten) < 0) o.ten.push(c.ten); if (c.open) o.open = true; } else m.set(k, { key: k, bn: c.bn, s: c.s, e: c.e, khoa: c.khoa, ten: c.ten ? [c.ten] : [], open: !!c.open }); });
     return Array.from(m.values()).sort((a, b) => a.s - b.s);
   };
   const cdOn = c => (D.cdOff || []).indexOf(c.key) < 0;
   const cdNote = c => (c.khoa != null ? 'Người bệnh làm thủ thuật ở ' + (c.khoa || 'khoa khác') : 'Người bệnh đi chẩn đoán hình ảnh') + (c.ten.length ? ': ' + c.ten.join(', ') : '');
+  const cdWait = c => 'Chờ CĐHA: ' + (c.ten.length ? c.ten.join(', ') + ' ' : '') + 'làm lúc ' + hm(c.s) + ' chưa trả kết quả';
   const blocksEng = () => D.blocks.map(b => ({ kind: b.kind === 'perf' ? 'perf' : 'bn', who: b.who, s: b.s, e: b.kind === 'rv' ? 1440 : b.e, note: b.note }))
     .concat(wkToday().filter(wkOn).reduce((a, g) => a.concat(g.who.map(id => ({ kind: 'perf', who: id, s: g.s, e: g.e, note: 'Giờ chặn cố định theo tuần' }))), []))
-    .concat(cdList().filter(cdOn).map(c => ({ kind: 'bn', who: c.bn, s: c.s, e: c.e, note: cdNote(c) })));
+    .concat(cdList().filter(cdOn).map(c => ({ kind: 'bn', who: c.bn, s: c.s, e: c.e, note: cdNote(c), wait: c.open ? cdWait(c) : '' })));
   function autoBlocks() {   // người bệnh vào viện trong ngày: chặn bác sĩ chỉ định của người đó
     D.blocks = D.blocks.filter(b => !b.auto);
     H.pats.forEach(p => { if (p.vao != null && p.bsId) D.blocks.push({ id: ++D.bkSeq, kind: 'perf', who: p.bsId, s: p.vao, e: p.vao + S.newBlock, note: 'Khám ' + p.ten + ' mới vào lúc ' + hm(p.vao), auto: true }); });
@@ -811,7 +820,7 @@ function XepGioCore(H, $) {
   function makeRoom(back) {
     back = (back || []).filter(id => { const t = byId(id); return t && t.tt === 3 && !App.lock.has(id) && !goneBn(t.bn); });
     const stuckN = () => planCount('stuck'), st = id => (App.plan.get(id) || {}).status;
-    const full = Array.from(App.plan.values()).some(r => r.status === 'stuck' && /kín lịch|không còn khoảng trống/.test(r.note || ''));
+    const full = Array.from(App.plan.values()).some(r => r.status === 'stuck' && /kín lịch|không còn khoảng trống|Chờ CĐHA/.test(r.note || ''));
     const need0 = stuckN() + back.length;
     if (!need0 || (!full && !back.length)) return null;
     const cand = workTickets().filter(t => t.tt === 3 && t.s != null && groupOf(t.ten) && !App.move.has(t.id) && !App.lock.has(t.id) && !goneBn(t.bn) && back.indexOf(t.id) < 0).map(t => t.id);
@@ -1000,9 +1009,21 @@ function XepGioCore(H, $) {
     const ext = (H.ext || []).map(e => { const v = e.done && e.s != null ? { s: e.s, e: e.e, perf: e.perf || '', may: e.may || '' } : null;
       return { ext: true, khoa: e.khoa || 'khoa khác', t: { id: 'x' + e.id, bn: e.bn, tenBN: e.tenBN, maBA: e.maBA, ten: e.ten, cd: e.cd }, g: groupOf(e.ten), v, st: ['info', v ? 'Khoa khác đã cập nhật' : 'Chờ khoa khác cập nhật'], kind: 'ext', who: v ? v.perf : '', busy: 0 }; });
     const n = k => all.filter(x => x.kind === k).length, extNote = ext.length ? ' · ' + ext.length + ' của khoa khác' : '';
-    const list = all.concat(ext).filter(x => (!fp || (!x.ext && x.v && x.v.perf === fp)) && (!fs || (fs === 'bad' ? x.st[0] === 'do' : x.kind === fs)) &&
-      (!find || fold([x.t.tenBN, x.t.maBA, x.t.ten, x.who, x.khoa || '', x.v ? x.v.may || '' : ''].join(' ')).indexOf(find) >= 0));
-    const filtered = !!(find || fp || fs);
+    // Lọc theo loại thủ thuật (ô chọn #planGrp) và dòng thống kê số ca từng loại (#grpStat). '?' là ca chưa có quy tắc thời gian.
+    // Số ca trong dòng thống kê tính trên các ca của khoa khớp những bộ lọc khác (tìm, trạng thái, người làm), không tính ca của khoa khác.
+    const gkOf = x => x.g ? x.g.k : '?';
+    let fg = $('#planGrp').value; if (fg && fg !== '?' && !S.groups.some(g => g.k === fg)) fg = '';
+    const pass = (x, anyGrp) => (!fp || (!x.ext && x.v && x.v.perf === fp)) && (!fs || (fs === 'bad' ? x.st[0] === 'do' : x.kind === fs)) && (anyGrp || !fg || gkOf(x) === fg) &&
+      (!find || fold([x.t.tenBN, x.t.maBA, x.t.ten, x.who, x.khoa || '', x.v ? x.v.may || '' : ''].join(' ')).indexOf(find) >= 0);
+    const list = all.concat(ext).filter(x => pass(x));
+    const filtered = !!(find || fp || fs || fg);
+    const base = all.filter(x => pass(x, true)), cnt = new Map(), dayKs = new Set(all.map(gkOf));
+    base.forEach(x => cnt.set(gkOf(x), (cnt.get(gkOf(x)) || 0) + 1));
+    const grps = S.groups.filter(g => !g.skip && (dayKs.has(g.k) || g.k === fg)).map(g => [g.k, g.label]).concat(dayKs.has('?') || fg === '?' ? [['?', 'Chưa có quy tắc']] : []);
+    $('#planGrp').innerHTML = '<option value="">Mọi thủ thuật</option>' + grps.map(g => `<option value="${esc(g[0])}">${esc(g[1])}</option>`).join(''); $('#planGrp').value = fg;
+    $('#grpStat').hidden = !all.length;
+    $('#grpStat').innerHTML = [['', 'Tất cả', base.length]].concat(grps.map(g => [g[0], g[1], cnt.get(g[0]) || 0]).filter(g => g[2] || g[0] === fg))
+      .map(g => `<button type="button" data-grp="${esc(g[0])}" aria-pressed="${g[0] === fg}">${esc(g[1])}: ${g[2]} ca</button>`).join('');
     $('#dsInfo').textContent = !H.tickets.length ? 'Chưa có danh sách. Tải danh sách của ngày cần chạy trước.'
       : `Ngày ${H.dateLabel}: ${all.length} thủ thuật của ${new Set(all.map(x => x.t.bn)).size} người bệnh · ${n('his')} đã lưu trên HIS · ${n('plan')} dự kiến · ${n('none')} chưa có giờ${extNote}${filtered ? ' · đang hiện ' + list.length + ' dòng khớp bộ lọc' : ''}`;
     $('#bangSum').textContent = H.tickets.length ? `${all.length} thủ thuật · ${n('his')} đã lưu · ${n('plan')} dự kiến · ${n('none')} chưa có giờ${extNote}` : '';
@@ -1062,7 +1083,7 @@ function XepGioCore(H, $) {
     const kindName = b => b.auto ? 'Bác sĩ khám người bệnh mới' : b.kind === 'perf' ? 'Chặn người làm' : b.kind === 'rv' ? 'Ra viện, xử trí' : 'Chặn người bệnh';
     const wk = wkToday(), cd = cdList();
     $('#blocks').innerHTML = '<thead><tr><th>Loại</th><th>Ai</th><th>Từ</th><th>Đến</th><th></th></tr></thead><tbody>' +
-      cd.map(c => { const on = cdOn(c); return `<tr${on ? '' : ' class="off"'}><td>${c.khoa != null ? 'Thủ thuật ở khoa khác' : 'Người bệnh đi CĐHA'} <span class="tag">tự động</span></td><td class="wrapcell">${esc((H.pats.get(c.bn) || {}).ten || c.bn)}${c.ten.length || c.khoa ? '<span class="sub">' + esc([c.khoa].concat(c.ten).filter(Boolean).join(' · ')) + '</span>' : ''}${on ? '' : ' · đã bỏ chặn'}</td><td>${hm(c.s)}</td><td>${c.e >= 1440 ? 'hết ngày' : hm(c.e)}</td><td><button type="button" class="small" data-cdoff="${esc(c.key)}">${on ? 'Bỏ chặn' : 'Dùng lại'}</button></td></tr>`; }).join('') +
+      cd.map(c => { const on = cdOn(c); return `<tr${on ? '' : ' class="off"'}><td>${c.khoa != null ? 'Thủ thuật ở khoa khác' : 'Người bệnh đi CĐHA'} <span class="tag">tự động</span></td><td class="wrapcell">${esc((H.pats.get(c.bn) || {}).ten || c.bn)}${c.ten.length || c.khoa ? '<span class="sub">' + esc([c.khoa].concat(c.ten).filter(Boolean).join(' · ')) + '</span>' : ''}${on ? '' : ' · đã bỏ chặn'}</td><td>${hm(c.s)}</td><td>${c.open ? 'chờ kết quả' : c.e >= 1440 ? 'hết ngày' : hm(c.e)}</td><td><button type="button" class="small" data-cdoff="${esc(c.key)}">${on ? 'Bỏ chặn' : 'Dùng lại'}</button></td></tr>`; }).join('') +
       wk.map(g => { const on = wkOn(g), names = g.who.map(staffName).join(', '); return `<tr${on ? '' : ' class="off"'}><td>Chặn người làm <span class="tag">hằng tuần</span></td><td class="wrapcell">${esc(g.who.length > 2 ? g.who.length + ' người: ' + names : names)}${on ? '' : ' · hôm nay không áp dụng'}</td><td>${hm(g.s)}</td><td>${hm(g.e)}</td><td><button type="button" class="small" data-wkoff="${g.key}">${on ? 'Bỏ hôm nay' : 'Dùng lại'}</button></td></tr>`; }).join('') +
       (D.blocks.length ? D.blocks.slice().sort((a, b) => a.s - b.s).map(b => `<tr><td>${kindName(b)}${b.auto ? ' <span class="tag">tự động</span>' : ''}</td>` +
         `<td>${esc(b.kind === 'perf' ? staffName(b.who) : (H.pats.get(b.who) || {}).ten || b.who)}</td><td>${hm(b.s)}</td><td>${b.kind === 'rv' ? 'hết ngày' : hm(b.e)}</td><td><button type="button" class="small" data-delbk="${b.id}">Xóa</button></td></tr>`).join('')
@@ -1130,10 +1151,10 @@ function XepGioCore(H, $) {
     let ticks = ''; for (let m = Math.ceil(t0 / 30) * 30; m <= t1; m += 30) ticks += `<span style="left:${px(m)}px">${hm(m)}</span>`;
     let html = `<div class="lname muted">${mode === 'perf' ? 'Người làm' : mode === 'bn' ? 'Người bệnh' : 'Máy'}</div><div class="track axis" style="width:${W}px">${ticks}</div>`;
     lanes.forEach(l => {
-      const mine = rows.filter(r => (mode === 'perf' ? r.perf : mode === 'bn' ? r.bn : r.may) === l.id);
+      const fg = $('#planGrp').value, mine = rows.filter(r => (mode === 'perf' ? r.perf : mode === 'bn' ? r.bn : r.may) === l.id && (!fg || r.gk === fg));   // đang lọc một loại thủ thuật thì chỉ vẽ ca loại đó
       let inner = off.map(o => `<div class="off" style="left:${px(o[0])}px;width:${px(o[1]) - px(o[0])}px"></div>`).join('');
       if (mode === 'perf') { const on = D.on[l.id] || [true, true]; sh.forEach((s, i) => { if (!on[i]) inner += `<div class="off" style="left:${px(s[0])}px;width:${px(s[1]) - px(s[0])}px"></div>`; }); }
-      blocksEng().filter(b => (mode === 'perf' && b.kind === 'perf' || mode === 'bn' && b.kind === 'bn') && b.who === l.id).forEach(b => { inner += `<div class="blk" style="left:${px(b.s)}px;width:${Math.max(3, px(b.e) - px(b.s))}px" data-tip="Giờ chặn ${hm(b.s)}–${b.e >= 1440 ? 'hết ngày' : hm(b.e)} · ${esc(b.note)}"></div>`; });
+      blocksEng().filter(b => (mode === 'perf' && b.kind === 'perf' || mode === 'bn' && b.kind === 'bn') && b.who === l.id).forEach(b => { inner += `<div class="blk" style="left:${px(b.s)}px;width:${Math.max(3, px(b.e) - px(b.s))}px" data-tip="Giờ chặn ${hm(b.s)}–${b.wait ? 'chờ kết quả' : b.e >= 1440 ? 'hết ngày' : hm(b.e)} · ${esc(b.note)}"></div>`; });
       mine.forEach(r => { const end = mode === 'perf' ? r.s + r.busy : r.e, w = Math.max(6, px(end) - px(r.s) - 2);
         inner += `<div class="bar ${r.src === 'plan' ? 'plan' : ''} ${bad.has(r.id) ? 'bad' : ''}" style="left:${px(r.s)}px;width:${w}px" data-tip="${esc(rowLabel(r))}">${w >= 26 ? '<span>' + esc(r.g ? r.g.code : '?') + '</span>' : ''}</div>`; });
       html += `<div class="lname" title="${esc(l.name)}"${mode === 'perf' ? ' data-lane="' + esc(l.id) + '" style="cursor:pointer"' : ''}>${esc(l.name)}</div><div class="track" style="width:${W}px;${grid}">${inner}</div>`;
@@ -1260,7 +1281,7 @@ function XepGioCore(H, $) {
       else if (d.f === 'cert') g.cert = v;
       touch(); return true;
     }
-    if (d.addmay) { const g = S.groups.find(x => x.k === d.addmay), code = v.trim(); if (!g || !code) return false; const key = g.k, a = S.may[key] = S.may[key] || []; if (a.indexOf(code) < 0) { a.push(code); a.sort(); } touch(); return true; }
+    if (d.addmay) { const g = S.groups.find(x => x.k === d.addmay), code = v.trim(); if (!g || !code) return false; const key = g.k, a = S.may[key] = S.may[key] || []; if (a.indexOf(code) < 0) { a.push(code); a.sort(); } S.mayGone = (S.mayGone || []).filter(m => m !== offKey(g, code)); touch(); return true; }   // tự gõ lại mã đã xóa thì dùng lại
     if (d.cname) { const c = S.certs.find(x => x.k === d.cname); if (!c) return false; c.label = v.trim() || c.label; touch(); return true; }
     return false;
   }
@@ -1269,7 +1290,7 @@ function XepGioCore(H, $) {
     if (id === 'mayFetch') { runMayFetch(); return; }
     if (id === 'svEdit') { App.svEdit = !App.svEdit; App.delAsk = null; App.svMsg = ''; renderAll(); return; }
     if (id === 'svAdd') { const k = 'g' + Date.now().toString(36); S.groups.push({ k, code: 'TT', label: 'Thủ thuật mới', kw: [], dur: 15, busy: 5, cert: S.certs[0].k, pin: true, custom: true }); App.svMsg = 'Đã thêm một dòng ở cuối bảng. Điền tên, từ khóa và thời gian cho thủ thuật mới.'; touch(); dirty(); return; }
-    if (d.delmay != null) { const g = S.groups.find(x => x.k === d.g), key = g.k; S.may[key] = (S.may[key] || []).filter(m => m !== d.delmay); S.mayOff = S.mayOff.filter(m => m !== offKey(g, d.delmay)); touch(); dirty(); return; }
+    if (d.delmay != null) { const g = S.groups.find(x => x.k === d.g), key = g.k; S.may[key] = (S.may[key] || []).filter(m => m !== d.delmay); S.mayOff = S.mayOff.filter(m => m !== offKey(g, d.delmay)); S.mayGone = (S.mayGone || []).filter(m => m !== offKey(g, d.delmay)).concat([offKey(g, d.delmay)]); touch(); dirty(); return; }   // nhớ để không tự thêm lại
     if (d.delg != null) {
       if (App.delAsk !== 'g:' + d.delg) { App.delAsk = 'g:' + d.delg; renderCD(); return; }
       const g = S.groups.find(x => x.k === d.delg); App.delAsk = null;
@@ -1301,10 +1322,11 @@ function XepGioCore(H, $) {
     App.running = true; App.svMsg = 'Đang đọc danh sách máy từ HIS: app mở form của từng thủ thuật rồi đóng lại, không lưu...'; renderAll();
     let res = {}, err = '';
     try { res = await H.fetchMachines(probes); } catch (e) { err = e.message || String(e); }
-    let added = 0;
-    Object.keys(res).forEach(mk => { const a = S.may[mk] = S.may[mk] || []; (res[mk] || []).forEach(code => { if (a.indexOf(code) < 0) { a.push(code); if (S.mayOff.indexOf(mk + '|' + code) < 0) S.mayOff.push(mk + '|' + code); added++; } }); a.sort(); });
+    let added = 0, gone = 0;
+    Object.keys(res).forEach(mk => { const a = S.may[mk] = S.may[mk] || []; (res[mk] || []).forEach(code => { if (a.indexOf(code) >= 0) return; if ((S.mayGone || []).indexOf(mk + '|' + code) >= 0) { gone++; return; } a.push(code); if (S.mayOff.indexOf(mk + '|' + code) < 0) S.mayOff.push(mk + '|' + code); added++; }); a.sort(); });
     App.running = false;
-    App.svMsg = err ? 'Không đọc được danh sách máy: ' + err : added ? 'Đã thêm ' + added + ' mã máy từ HIS, đang để chưa tích. Hãy tích những máy khoa thực sự dùng.' : 'HIS không có mã máy nào ngoài các máy đã có trong bảng.';
+    const goneNote = gone ? ' Bỏ qua ' + gone + ' mã máy bạn đã xóa; muốn dùng lại thì bấm Cập nhật rồi gõ mã đó vào ô Thêm mã máy.' : '';
+    App.svMsg = err ? 'Không đọc được danh sách máy: ' + err : (added ? 'Đã thêm ' + added + ' mã máy từ HIS, đang để chưa tích. Hãy tích những máy khoa thực sự dùng.' : 'HIS không có mã máy nào ngoài các máy đã có trong bảng.') + goneNote;
     log(App.svMsg); if (added) touch(); dirty();
   }
   function renderPerfFilter() { const v = $('#planPerf').value; $('#planPerf').innerHTML = '<option value="">Mọi người làm</option>' + S.staff.map(s => `<option value="${esc(s.id)}">${esc(s.ten)}</option>`).join(''); $('#planPerf').value = v; }
@@ -1361,7 +1383,9 @@ function XepGioCore(H, $) {
   $('#autoFill').addEventListener('change', e => { try { localStorage.setItem('xg-auto', e.target.checked ? '1' : '0'); } catch (err) {} renderTiles(); });
   $('#btnCheck2').addEventListener('click', () => runCheck()); $('#btnFix2').addEventListener('click', runFix);
   const redraw = () => { if (!S.staff) return; renderBang(); renderTL(); };   // chưa nạp cài đặt thì chưa có gì để vẽ
-  $('#planPerf').addEventListener('change', redraw); $('#planSt').addEventListener('change', redraw); $('#bangSearch').addEventListener('input', redraw);
+  $('#planPerf').addEventListener('change', redraw); $('#planSt').addEventListener('change', redraw); $('#planGrp').addEventListener('change', redraw); $('#bangSearch').addEventListener('input', redraw);
+  // dòng thống kê theo loại thủ thuật: bấm một loại để chỉ xem loại đó, bấm lần nữa (hoặc bấm Tất cả) để xem lại mọi loại
+  $('#grpStat').addEventListener('click', e => { const b = e.target.closest('button[data-grp]'); if (!b) return; $('#planGrp').value = $('#planGrp').value === b.dataset.grp ? '' : b.dataset.grp; redraw(); });
   $('#bangView').addEventListener('click', e => { const b = e.target.closest('button[data-view]'); if (b) setView(b.dataset.view); });
   // nút và ô số liệu dẫn sang đúng chỗ cần xem: 'cc', 'trung', hoặc 'bang:<trạng thái>'
   $('#tab-run').addEventListener('click', e => {
@@ -1369,7 +1393,7 @@ function XepGioCore(H, $) {
     if (su) { const k = su.dataset.setup; SETUP.forEach(x => { if (k === 'all' || k === x[0]) S.setup[x[0]] = true; }); persist(); renderSetup(); return; }
     const b = e.target.closest('[data-goto]'); if (!b) return;
     const a = b.dataset.goto.split(':');
-    if (a[0] === 'bang') { $('#planSt').value = a[1] || ''; $('#planPerf').value = ''; $('#bangSearch').value = ''; if (App.view === 'tl') App.view = 'gio'; }
+    if (a[0] === 'bang') { $('#planSt').value = a[1] || ''; $('#planPerf').value = ''; $('#planGrp').value = ''; $('#bangSearch').value = ''; if (App.view === 'tl') App.view = 'gio'; }
     openThing(a[0]);
   });
   ['#menubar', '#tab-run', '#bangBar', '#pop'].forEach(sel => $(sel).addEventListener('click', e => { const b = e.target.closest('[data-open]'); if (b) openThing(b.dataset.open); }));
@@ -1436,7 +1460,7 @@ function XepGioCore(H, $) {
   $('#trungTable').addEventListener('click', e => {
     const b = e.target.closest('[data-see]'); if (!b) return;
     const ids = b.dataset.see.split(',').map(tid), bns = new Set(ids.map(id => (byId(id) || {}).bn).filter(Boolean));
-    $('#planSt').value = ''; $('#planPerf').value = ''; $('#bangSearch').value = ''; App.view = 'bn';
+    $('#planSt').value = ''; $('#planPerf').value = ''; $('#planGrp').value = ''; $('#bangSearch').value = ''; App.view = 'bn';
     openBn.clear(); shutBn.clear(); H.pats.forEach(p => { (bns.has(p.bn) ? openBn : shutBn).add(p.bn); });
     App.hit = new Set(ids);
     openThing('bang');

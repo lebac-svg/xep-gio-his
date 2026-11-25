@@ -9,10 +9,12 @@ const X = (function () {
     const book = new Map();
     const get = k => { let v = book.get(k); if (!v) book.set(k, v = []); return v; };
     const bk = {
-      clash: (k, s, e, gap) => get(k).some(iv => { const g = iv[2] ? 0 : gap; return s < iv[1] + g && iv[0] < e + g; }),
-      add: (k, s, e, isBlock) => { get(k).push([s, e, isBlock ? 1 : 0]); }
+      // skipWait: không tính các khoảng chặn đang chờ (b.wait), để biết ca kẹt có phải chỉ vì khoảng chặn đó
+      clash: (k, s, e, gap, skipWait) => get(k).some(iv => { if (skipWait && iv[3]) return false; const g = iv[2] ? 0 : gap; return s < iv[1] + g && iv[0] < e + g; }),
+      add: (k, s, e, isBlock, wait) => { get(k).push([s, e, isBlock ? 1 : 0, wait ? 1 : 0]); },
+      wait: new Map()   // người bệnh -> ghi chú của khoảng chặn đang chờ (ví dụ chờ kết quả chẩn đoán hình ảnh)
     };
-    (blocks || []).forEach(b => bk.add((b.kind === 'perf' ? 'P:' : 'B:') + b.who, b.s, b.e, true));
+    (blocks || []).forEach(b => { bk.add((b.kind === 'perf' ? 'P:' : 'B:') + b.who, b.s, b.e, true, b.wait); if (b.wait && b.kind !== 'perf') bk.wait.set(b.who, b.wait); });
     return bk;
   }
 
@@ -27,7 +29,7 @@ const X = (function () {
       const a = cfg.shifts[i][0], b = cfg.shifts[i][1];
       for (let s = Math.max(a, (t.order || 0) + cfg.lead); s + t.dur <= b; s++) {
         if (!relax.perf && bk.clash('P:' + st.id, s, s + t.busy, cfg.gapPerf)) continue;
-        if (!relax.bn && bk.clash('B:' + t.bn, s, s + t.dur, cfg.gapBn)) continue;
+        if (!relax.bn && bk.clash('B:' + t.bn, s, s + t.dur, cfg.gapBn, relax.wait)) continue;
         let may = null;
         if (t.machines && !relax.may) { may = t.machines.find(m => !bk.clash('M:' + m, s, s + t.dur, cfg.gapMay)); if (!may) continue; }
         return { s, may, shift: i };
@@ -47,6 +49,8 @@ const X = (function () {
     const lastEnd = Math.max.apply(null, cfg.shifts.map(x => x[1]));
     if ((t.order || 0) + cfg.lead + t.dur > lastEnd) return 'Chỉ định lúc ' + toHM(t.order) + ', không kịp xong trước ' + toHM(lastEnd);
     const can = r => on.some(st => earliest(t, st, cfg, bk, r));
+    const w = bk.wait.get(t.bn);
+    if (w && can({ wait: true })) return w;   // bỏ riêng khoảng chặn đang chờ thì xếp được: ca kẹt vì khoảng chặn đó
     if (can({ bn: true })) return 'Người bệnh không còn khoảng trống phù hợp';
     if (can({ may: true })) return 'Máy đã kín lịch';
     if (can({ perf: true })) return 'Người làm có chứng chỉ đã kín lịch';
