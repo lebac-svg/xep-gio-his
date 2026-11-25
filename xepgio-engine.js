@@ -3,6 +3,7 @@ const X = (function () {
   const toMin = s => { const m = /(\d{1,2}):(\d{2})/.exec(s || ''); return m ? +m[1] * 60 + +m[2] : null; };
   const toHM = n => n == null ? '' : String(Math.floor(n / 60)).padStart(2, '0') + ':' + String(n % 60).padStart(2, '0');
   const rank = (st, gk) => (st.prio && st.prio[gk]) || 2;
+  const mayKey = m => String(m || '').replace(/[\s.\-_\/\[\]()]/g, '').toLowerCase();   // mã máy bỏ dấu chấm, gạch, ngoặc, khoảng trắng: để nhận ra cùng một máy khi HIS đổi cách viết mã
 
   // Sổ ghi các khoảng đã bận của người làm (P:), người bệnh (B:), máy (M:). Khoảng chặn không cộng thêm thời gian nghỉ.
   function makeBook(blocks) {
@@ -72,7 +73,12 @@ const X = (function () {
       if (t.fixed) return;
       if (t.keepAt) {   // ca đang có giờ trên HIS được thả ra để lấy chỗ: giờ cũ còn trống thì giữ nguyên
         const k = t.keepAt, be = Math.min(k.e, k.s + (t.busy || k.e - k.s));
-        if (!(k.perf && bk.clash('P:' + k.perf, k.s, be, cfg.gapPerf)) && !bk.clash('B:' + t.bn, k.s, k.e, cfg.gapBn) && !(k.may && bk.clash('M:' + k.may, k.s, k.e, cfg.gapMay))) {
+        const free = !(k.perf && bk.clash('P:' + k.perf, k.s, be, cfg.gapPerf)) && !bk.clash('B:' + t.bn, k.s, k.e, cfg.gapBn);
+        if (t.swapMay) {   // ca chỉ sai hoặc thiếu mã máy: giữ nguyên giờ và người làm, chỉ đổi sang máy đang dùng còn trống; ưu tiên máy cùng mã (chỉ khác dấu chấm, khoảng trắng)
+          const frees = free ? (t.machines || []).filter(m => !bk.clash('M:' + m, k.s, k.e, cfg.gapMay)) : [];
+          const may = frees.find(m => mayKey(m) === mayKey(k.may)) || frees[0];
+          if (may) { put(t, k.perf, k.s, k.e, be, may); out.set(t.id, { s: k.s, e: k.e, may, perf: k.perf || null, status: 'planned', note: '' }); return; }
+        } else if (free && !(k.may && bk.clash('M:' + k.may, k.s, k.e, cfg.gapMay))) {
           put(t, k.perf, k.s, k.e, be, k.may);
           out.set(t.id, { s: k.s, e: k.e, may: k.may || null, perf: k.perf || null, status: 'planned', note: '', kept: true }); return;
         }
@@ -151,6 +157,7 @@ const X = (function () {
       const st = byId.get(r.perf);
       if (st) { if (!st.can[r.gk]) add('cert', 'err', [r.id]); if (si >= 0 && !st.on[si]) add('absent', 'err', [r.id]); }
       if (r.needMay && !r.may) add('nomay', 'err', [r.id]);
+      if (r.badMay) add('oldmay', 'err', [r.id], 'mã ' + r.may);   // mã máy trên ca không có trong danh sách máy của thủ thuật (ví dụ mã cũ HIS đã đổi)
       if (r.need && r.e - r.s < r.need) add('dur', 'err', [r.id], 'làm ' + (r.e - r.s) + ' phút, quy định ' + r.need + ' phút');
       (blocks || []).forEach(b => {
         if (b.kind === 'perf' && b.who === r.perf && r.s < b.e && b.s < Math.min(r.e, r.s + r.busy)) add('pblock', 'err', [r.id], b.note);
@@ -159,6 +166,6 @@ const X = (function () {
     });
     return out;
   }
-  return { toMin, toHM, plan, check, prepare, pass };
+  return { toMin, toHM, plan, check, prepare, pass, mayKey };
 })();
 if (typeof module !== 'undefined') module.exports = X;

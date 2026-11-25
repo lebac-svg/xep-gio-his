@@ -6,12 +6,13 @@ if (window.top !== window) return;                           // chỉ gắn ở 
 if (window.__xepgio) return;                                 // đã gắn rồi thì thôi
 const cfg0 = window.__xepgioCfg || {};
 if (cfg0.host && location.hostname !== cfg0.host) return;    // chỉ chạy trên đúng địa chỉ HIS đã khai
-window.__xepgio = { version: '0.41' };
+window.__xepgio = { version: '0.42' };
 
 const X = (function () {
   const toMin = s => { const m = /(\d{1,2}):(\d{2})/.exec(s || ''); return m ? +m[1] * 60 + +m[2] : null; };
   const toHM = n => n == null ? '' : String(Math.floor(n / 60)).padStart(2, '0') + ':' + String(n % 60).padStart(2, '0');
   const rank = (st, gk) => (st.prio && st.prio[gk]) || 2;
+  const mayKey = m => String(m || '').replace(/[\s.\-_\/\[\]()]/g, '').toLowerCase();   // mã máy bỏ dấu chấm, gạch, ngoặc, khoảng trắng: để nhận ra cùng một máy khi HIS đổi cách viết mã
 
   // Sổ ghi các khoảng đã bận của người làm (P:), người bệnh (B:), máy (M:). Khoảng chặn không cộng thêm thời gian nghỉ.
   function makeBook(blocks) {
@@ -81,7 +82,12 @@ const X = (function () {
       if (t.fixed) return;
       if (t.keepAt) {   // ca đang có giờ trên HIS được thả ra để lấy chỗ: giờ cũ còn trống thì giữ nguyên
         const k = t.keepAt, be = Math.min(k.e, k.s + (t.busy || k.e - k.s));
-        if (!(k.perf && bk.clash('P:' + k.perf, k.s, be, cfg.gapPerf)) && !bk.clash('B:' + t.bn, k.s, k.e, cfg.gapBn) && !(k.may && bk.clash('M:' + k.may, k.s, k.e, cfg.gapMay))) {
+        const free = !(k.perf && bk.clash('P:' + k.perf, k.s, be, cfg.gapPerf)) && !bk.clash('B:' + t.bn, k.s, k.e, cfg.gapBn);
+        if (t.swapMay) {   // ca chỉ sai hoặc thiếu mã máy: giữ nguyên giờ và người làm, chỉ đổi sang máy đang dùng còn trống; ưu tiên máy cùng mã (chỉ khác dấu chấm, khoảng trắng)
+          const frees = free ? (t.machines || []).filter(m => !bk.clash('M:' + m, k.s, k.e, cfg.gapMay)) : [];
+          const may = frees.find(m => mayKey(m) === mayKey(k.may)) || frees[0];
+          if (may) { put(t, k.perf, k.s, k.e, be, may); out.set(t.id, { s: k.s, e: k.e, may, perf: k.perf || null, status: 'planned', note: '' }); return; }
+        } else if (free && !(k.may && bk.clash('M:' + k.may, k.s, k.e, cfg.gapMay))) {
           put(t, k.perf, k.s, k.e, be, k.may);
           out.set(t.id, { s: k.s, e: k.e, may: k.may || null, perf: k.perf || null, status: 'planned', note: '', kept: true }); return;
         }
@@ -160,6 +166,7 @@ const X = (function () {
       const st = byId.get(r.perf);
       if (st) { if (!st.can[r.gk]) add('cert', 'err', [r.id]); if (si >= 0 && !st.on[si]) add('absent', 'err', [r.id]); }
       if (r.needMay && !r.may) add('nomay', 'err', [r.id]);
+      if (r.badMay) add('oldmay', 'err', [r.id], 'mã ' + r.may);   // mã máy trên ca không có trong danh sách máy của thủ thuật (ví dụ mã cũ HIS đã đổi)
       if (r.need && r.e - r.s < r.need) add('dur', 'err', [r.id], 'làm ' + (r.e - r.s) + ' phút, quy định ' + r.need + ' phút');
       (blocks || []).forEach(b => {
         if (b.kind === 'perf' && b.who === r.perf && r.s < b.e && b.s < Math.min(r.e, r.s + r.busy)) add('pblock', 'err', [r.id], b.note);
@@ -168,7 +175,7 @@ const X = (function () {
     });
     return out;
   }
-  return { toMin, toHM, plan, check, prepare, pass };
+  return { toMin, toHM, plan, check, prepare, pass, mayKey };
 })();
 
 function XepGioCore(H, $) {
@@ -321,12 +328,22 @@ function XepGioCore(H, $) {
   // scope: null = cả khoa, hoặc Set mã người bệnh để chạy riêng (ca của người khác được giữ nguyên)
   function buildPlan(scope) {
     const tasks = [];
+    // Ca xanh đang được xếp lại mà trên HIS chỉ có lỗi về mã máy (thiếu mã, hoặc mã không có trong danh sách): không dời giờ, chỉ đổi máy.
+    // Xét trên bảng giờ đang lưu ở HIS; ca còn dính lỗi hay cảnh báo nào khác thì vẫn được xếp giờ mới như trước.
+    let mayErr = null;
+    const onlyMay = id => {
+      if (!mayErr) { mayErr = new Map(); X.check(workTickets().filter(t => t.tt === 3 && t.s != null).map(t => rowOf(t, t)), staffEng(), cfg(), blocksEng())
+        .forEach(c => c.ids.forEach(i => { const o = mayErr.get(i) || { n: 0, other: 0 }; o.n++; if (c.type !== 'oldmay' && c.type !== 'nomay') o.other++; mayErr.set(i, o); })); }
+      const o = mayErr.get(id); return !!o && !o.other;
+    };
     workTickets().forEach(t => {
       if (App.skip.has(t.id)) { App.plan.delete(t.id); return; }
       const g = groupOf(t.ten), old = App.plan.get(t.id);
       const b = { id: t.id, bn: t.bn, gk: g ? g.k : '?', dur: g ? g.dur : 0, busy: g ? g.busy : 0, machines: g ? machinesOf(g) : null, order: t.cd, pinPerf: App.manual.get(t.id) || null };
       if (t.tt === 3 && !App.move.has(t.id) && !App.free.has(t.id)) { b.fixed = { s: t.s, e: t.e, may: t.may, perf: t.perf }; b.dur = t.e - t.s; b.busy = Math.min(b.busy || b.dur, b.dur); b.keep = 'his'; }
-      else if (t.tt === 3 && t.s != null && (!scope || scope.has(t.bn))) { const si = S.shifts.findIndex(sh => t.s >= sh[0] && t.s < sh[1]); if (si >= 0) b.hold = si; if (!App.move.has(t.id)) b.keepAt = { s: t.s, e: t.e, may: t.may, perf: t.perf }; }   // ca xanh có lỗi: xếp lại trong đúng buổi đã làm nếu còn chỗ
+      else if (t.tt === 3 && t.s != null && (!scope || scope.has(t.bn))) { const si = S.shifts.findIndex(sh => t.s >= sh[0] && t.s < sh[1]); if (si >= 0) b.hold = si;   // ca xanh có lỗi: xếp lại trong đúng buổi đã làm nếu còn chỗ
+        if (!App.move.has(t.id)) b.keepAt = { s: t.s, e: t.e, may: t.may, perf: t.perf };
+        else if (onlyMay(t.id)) { b.keepAt = { s: t.s, e: t.e, may: t.may, perf: t.perf }; b.swapMay = true; } }   // ca xanh chỉ sai hoặc thiếu mã máy: giữ giờ và người làm, chỉ đổi máy
       if (b.fixed) {} else if (scope && !scope.has(t.bn)) { if (old && old.status === 'planned') { b.fixed = { s: old.s, e: old.e, may: old.may, perf: old.perf }; b.keep = 'plan'; } else return; }
       tasks.push(b);
     });
@@ -338,12 +355,18 @@ function XepGioCore(H, $) {
   }
 
   // Bảng giờ hiện hành: ca dự kiến (chưa điền) nếu có, không thì ca đã lưu trên HIS
+  // Một dòng của bảng giờ để soát lỗi: ca t với giờ, người làm, máy lấy từ v (v là chính t khi xét giờ đang lưu trên HIS, hoặc dòng dự kiến của app)
+  function rowOf(t, v) {
+    const g = groupOf(t.ten);
+    return { id: t.id, t, g, src: v === t ? 'his' : 'plan', s: v.s, e: v.e, perf: v.perf, may: v.may, bn: t.bn, gk: g ? g.k : '?', busy: g ? Math.min(g.busy, v.e - v.s) : v.e - v.s, order: t.cd, needMay: !!(g && mayList(g)), need: g ? g.dur : 0,
+      badMay: !!(v.may && g && mayList(g) && mayList(g).indexOf(v.may) < 0) };   // ca có mã máy không nằm trong danh sách máy của thủ thuật
+  }
   function curRows() {
     return workTickets().map(t => {
-      const g = groupOf(t.ten), p = App.plan.get(t.id);
+      const p = App.plan.get(t.id);
       const v = p && p.status === 'planned' ? p : t.tt === 3 ? t : null;
       if (!v || v.s == null) return null;
-      return { id: t.id, t, g, src: v === t ? 'his' : 'plan', s: v.s, e: v.e, perf: v.perf, may: v.may, bn: t.bn, gk: g ? g.k : '?', busy: g ? Math.min(g.busy, v.e - v.s) : v.e - v.s, order: t.cd, needMay: !!(g && mayList(g)), need: g ? g.dur : 0 };
+      return rowOf(t, v);
     }).filter(Boolean);
   }
   const gLabel = r => r.g ? r.g.label : r.t.ten;
@@ -351,13 +374,14 @@ function XepGioCore(H, $) {
   const TYPES = {
     perf: ['Trùng người làm', 'Người làm nghỉ chưa đủ giữa hai ca'], bn: ['Trùng người bệnh', 'Người bệnh nghỉ chưa đủ giữa hai ca'], may: ['Trùng máy', 'Máy nghỉ chưa đủ giữa hai ca'],
     order: ['Làm trước giờ chỉ định', 'Chưa đủ thời gian sau giờ chỉ định'], shift: ['Ngoài giờ làm việc'], cert: ['Người làm không có chứng chỉ còn hạn'], absent: ['Người làm không đi làm buổi đó'],
-    nomay: ['Thiếu mã máy'], dur: ['Thời gian làm ngắn hơn quy định'], pblock: ['Đụng giờ chặn của người làm'], bblock: ['Đụng giờ chặn của người bệnh']
+    nomay: ['Thiếu mã máy'], oldmay: ['Mã máy không có trong danh sách'], dur: ['Thời gian làm ngắn hơn quy định'], pblock: ['Đụng giờ chặn của người làm'], bblock: ['Đụng giờ chặn của người bệnh']
   };
   const HINTS = {
     perf: 'Bấm Tự sắp xếp lại để app dời một trong hai ca.', bn: 'Bấm Tự sắp xếp lại để app dời một trong hai ca.', may: 'Bấm Tự sắp xếp lại để app dời ca hoặc đổi máy.',
     order: 'Ca làm quá sớm so với giờ chỉ định. Bấm Tự sắp xếp lại.', shift: 'Bấm Tự sắp xếp lại để đưa ca vào giờ làm việc.',
     cert: 'Đổi người làm trong Bảng giờ, hoặc xem lại mục Chứng chỉ.', absent: 'Xem lại Chấm công, hoặc bấm Tự sắp xếp lại để đổi người làm.',
-    nomay: 'Tích máy cho thủ thuật này ở mục Thủ thuật và máy, rồi bấm Tự sắp xếp lại.', dur: 'Bấm Tự sắp xếp lại để xếp đủ thời gian.',
+    nomay: 'Tích máy cho thủ thuật này ở mục Thủ thuật và máy, rồi bấm Tự sắp xếp lại: app giữ nguyên giờ, chỉ thêm máy.',
+    oldmay: 'Mã máy trên ca là mã cũ hoặc chưa có trong mục Thủ thuật và máy. Bấm Tự sắp xếp lại: app giữ nguyên giờ và người làm, chỉ đổi sang máy đang dùng. Nếu đây là máy đang dùng thì thêm mã vào danh sách.', dur: 'Bấm Tự sắp xếp lại để xếp đủ thời gian.',
     pblock: 'Bấm Tự sắp xếp lại, hoặc sửa giờ chặn của người làm.', bblock: 'Bấm Tự sắp xếp lại. Hết chỗ trước giờ chặn thì phải sửa giờ chặn của người bệnh.'
   };
   const typeName = c => (TYPES[c.type] || [c.type])[c.level === 'warn' ? 1 : 0] || TYPES[c.type][0];
@@ -387,7 +411,9 @@ function XepGioCore(H, $) {
     const back = Array.from(App.move).filter(id => { const p = App.plan.get(id); return !p || p.status !== 'planned'; });
     if (back.length) { back.forEach(id => App.move.delete(id)); buildPlan(null); }
     const kept = new Set(); X.check(curRows(), staffEng(), cfg(), blocksEng()).forEach(c => c.ids.forEach(id => { if (held(id)) kept.add(id); }));
-    return { moved: Array.from(fresh).filter(id => App.move.has(id)).length, kept: kept.size, keptGone: Array.from(kept).filter(id => goneBn(byId(id).bn)).length, back };
+    const sameSlot = id => { const t = byId(id), p = App.plan.get(id); return !!(t && p && p.s === t.s && p.e === t.e && p.perf === t.perf); };   // ca chỉ đổi mã máy, giờ và người làm như cũ
+    const got = Array.from(fresh).filter(id => App.move.has(id));
+    return { moved: got.length, swap: got.filter(sameSlot).length, kept: kept.size, keptGone: Array.from(kept).filter(id => goneBn(byId(id).bn)).length, back };
   }
   // Còn ca kẹt vì hết chỗ, hoặc ca xanh có lỗi chưa tìm được giờ mới: xem lại cả giờ của các ca đã xanh không lỗi.
   // Mọi ca xanh được thả ra cùng lúc nhưng ưu tiên giữ đúng giờ cũ; chỉ ca nào vướng mới bị dời, và chỉ nhận kết quả khi số ca kẹt giảm
@@ -417,7 +443,8 @@ function XepGioCore(H, $) {
   // Nhật ký viết ngắn: mỗi dòng nêu việc đã làm và con số, không nhắc lại hướng dẫn. Các cụm "ca kẹt", "còn N lỗi", "từ chối", "không cho ghi lại"... được logBad dùng để tô đỏ, đổi chữ thì sửa cả ở đó.
   const roomNote = r => !r ? '' : r.placed ? ` Dời ${r.moved} ca xanh để có chỗ cho ${r.placed} ca kẹt (ghi đè khi điền).` : ' Đã thử dời ca xanh nhưng vẫn thiếu chỗ cho ca kẹt.';
   const keptNote = (n, g) => !n ? '' : ' Giữ nguyên ' + n + ' ca xanh có lỗi: ' + [g ? g + ' ca người bệnh đã ra viện' : '', n - g ? (n - g) + ' ca HIS không cho ghi lại' : ''].filter(Boolean).join(', ') + '.';
-  const movedNote = n => n ? ` Dời ${n} ca xanh có lỗi (ghi đè khi điền).` : '';
+  // n: số ca xanh có lỗi được xếp lại; sw: trong đó số ca chỉ đổi mã máy, giữ nguyên giờ và người làm
+  const movedNote = (n, sw) => { sw = sw || 0; const a = [n - sw ? `Dời ${n - sw} ca xanh có lỗi` : '', sw ? `${n - sw ? 'đ' : 'Đ'}ổi mã máy ${sw} ca xanh, giữ nguyên giờ` : ''].filter(Boolean).join('; '); return a ? ` ${a} (ghi đè khi điền).` : ''; };
   // Ca xanh có lỗi mà không còn giờ trống phù hợp để dời: nói rõ để người dùng biết vì sao lỗi vẫn còn
   const noRoomNote = back => { const n = (back || []).filter(id => !App.move.has(id)).length; return n ? ' ' + n + ' ca xanh có lỗi không còn giờ trống để dời, giữ nguyên.' : ''; };
   const planCount = st => Array.from(App.plan.values()).filter(r => r.status === st).length;
@@ -427,7 +454,7 @@ function XepGioCore(H, $) {
     if (!before && !planCount('stuck')) { log('Không có ca nào cần sắp xếp lại.'); return; }   // còn ca kẹt thì vẫn thử xếp lại để lấy chỗ
     buildPlan(null);
     const fx = fixGreen(), room = makeRoom(fx.back), left = runCheck(true);
-    log(`Sắp xếp lại: trước ${before}, còn ${left} lỗi và cảnh báo; ${planCount('stuck')} ca kẹt.${movedNote(fx.moved)}${keptNote(fx.kept, fx.keptGone)}${roomNote(room)}${noRoomNote(fx.back)}`);
+    log(`Sắp xếp lại: trước ${before}, còn ${left} lỗi và cảnh báo; ${planCount('stuck')} ca kẹt.${movedNote(fx.moved, fx.swap)}${keptNote(fx.kept, fx.keptGone)}${roomNote(room)}${noRoomNote(fx.back)}`);
     if (H.canFill && !H.noAuto && $('#autoFill').checked) runFill();
   }
 
@@ -549,15 +576,16 @@ function XepGioCore(H, $) {
     // Ca đã xanh của những người này mà có lỗi (ví dụ vướng giờ ra viện vừa thêm) cũng được xếp giờ mới; không tìm được giờ thì giữ nguyên như trên HIS
     const bad = new Set(), can = id => { const t = byId(id); return !!t && t.tt === 3 && scope.has(t.bn) && !App.move.has(id) && !App.lock.has(id) && !goneBn(t.bn); };
     X.check(curRows(), staffEng(), cfg(), blocksEng()).forEach(c => { const id = c.ids.slice().reverse().find(can); if (id != null) bad.add(id); });
-    let green = 0, noRoom = 0;
+    let green = 0, noRoom = 0, swapN = 0;
     if (bad.size) {
       bad.forEach(id => App.move.add(id)); res = buildPlan(scope);
       const back = Array.from(bad).filter(id => (App.plan.get(id) || {}).status !== 'planned');
       if (back.length) { back.forEach(id => App.move.delete(id)); res = buildPlan(scope); }
       green = bad.size - back.length; noRoom = back.length;
+      swapN = Array.from(bad).filter(id => { const t = byId(id), p = App.plan.get(id); return !!(p && p.status === 'planned' && p.s === t.s && p.e === t.e && p.perf === t.perf); }).length;   // ca chỉ đổi mã máy
     }
     const names = scope.size > 3 ? scope.size + ' người bệnh' : Array.from(scope).map(b => H.pats.get(b).ten).join(', ');
-    log(`Chạy riêng ${names}: xếp ${res.filter(r => r.status === 'planned').length} ca, ${res.filter(r => r.status === 'stuck').length} ca kẹt.${movedNote(green)}${noRoom ? ` ${noRoom} ca xanh có lỗi không còn giờ trống để dời, giữ nguyên.` : ''}`);
+    log(`Chạy riêng ${names}: xếp ${res.filter(r => r.status === 'planned').length} ca, ${res.filter(r => r.status === 'stuck').length} ca kẹt.${movedNote(green, swapN)}${noRoom ? ` ${noRoom} ca xanh có lỗi không còn giờ trống để dời, giữ nguyên.` : ''}`);
     scope.forEach(b => App.sel.delete(b));   // chạy xong thì bỏ tích, lần sau tích người khác không bị lẫn
     if (H.canFill) closePop();
     renderAll(); askFill(scope);
@@ -892,7 +920,22 @@ function XepGioCore(H, $) {
     $('#sotTable').innerHTML = '<thead><tr><th>Ngày chỉ định</th><th>Người bệnh</th><th>Mã BA</th><th>Thủ thuật</th><th>BS chỉ định</th><th>Ghi chú</th></tr></thead><tbody>' +
       (m.length ? '' : '<tr><td colspan="6" class="empty">Không có phiếu sót trong 7 ngày trước ngày chạy.</td></tr>') + m.map(x => `<tr><td>${esc(x.ngay)}</td><td>${esc(x.tenBN)}</td><td>${esc(x.maBA)}</td><td>${esc(x.ten)}</td><td>${esc(x.bs || '')}</td><td>${x.cu ? 'còn giờ cũ' : 'chưa có giờ'}</td></tr>`).join('') + '</tbody>';
   }
-  // Đọc danh sách mã máy từ form của HIS cho từng thủ thuật có ca trong ngày. Máy mới được thêm ở trạng thái chưa tích, vì HIS có thể liệt kê cả máy của nơi khác.
+  // Khớp danh sách máy của app với danh sách HIS đang cho chọn (res: { mã thủ thuật: [mã máy] }); thủ thuật HIS không trả về mã nào thì để nguyên.
+  // Mã HIS không còn cho chọn (ví dụ mã cũ sau khi viện đổi mã) bị bỏ khỏi danh sách và được nhớ để không tự thêm lại: điền mã đó HIS cũng từ chối.
+  // Mã mới thêm ở trạng thái chưa tích, vì HIS có thể liệt kê cả máy của nơi khác. Mã người dùng đã xóa thì không thêm lại.
+  function syncMay(res) {
+    let added = 0, gone = 0; const stale = [];
+    Object.keys(res || {}).forEach(mk => {
+      const his = res[mk] || []; if (!his.length) return;
+      const key = c => mk + '|' + c, old = (S.may[mk] || []).filter(c => his.indexOf(c) < 0);
+      old.forEach(c => { stale.push(c); S.mayOff = S.mayOff.filter(m => m !== key(c)); if (S.mayGone.indexOf(key(c)) < 0) S.mayGone.push(key(c)); });
+      const a = S.may[mk] = (S.may[mk] || []).filter(c => his.indexOf(c) >= 0);
+      his.forEach(c => { if (a.indexOf(c) >= 0) return; if (S.mayGone.indexOf(key(c)) >= 0) { gone++; return; } a.push(c); if (S.mayOff.indexOf(key(c)) < 0) S.mayOff.push(key(c)); added++; });
+      a.sort();
+    });
+    return { added, gone, stale };
+  }
+  // Đọc danh sách mã máy từ form của HIS cho từng thủ thuật có ca trong ngày, rồi khớp danh sách máy của app theo đó (xem syncMay).
   async function runMayFetch() {
     if (App.running || !H.fetchMachines) return;
     const probes = [], seen = new Set();
@@ -900,11 +943,12 @@ function XepGioCore(H, $) {
     App.running = true; App.svMsg = 'Đang đọc danh sách máy từ HIS: app mở form của từng thủ thuật rồi đóng lại, không lưu...'; renderAll();
     let res = {}, err = '';
     try { res = await H.fetchMachines(probes); } catch (e) { err = e.message || String(e); }
-    let added = 0, gone = 0;
-    Object.keys(res).forEach(mk => { const a = S.may[mk] = S.may[mk] || []; (res[mk] || []).forEach(code => { if (a.indexOf(code) >= 0) return; if ((S.mayGone || []).indexOf(mk + '|' + code) >= 0) { gone++; return; } a.push(code); if (S.mayOff.indexOf(mk + '|' + code) < 0) S.mayOff.push(mk + '|' + code); added++; }); a.sort(); });
+    const r = syncMay(res);
     App.running = false;
-    const goneNote = gone ? ' Bỏ qua ' + gone + ' mã máy bạn đã xóa; muốn dùng lại thì bấm Cập nhật rồi gõ mã đó vào ô Thêm mã máy.' : '';
-    App.svMsg = err ? 'Không đọc được danh sách máy: ' + err : (added ? 'Đã thêm ' + added + ' mã máy từ HIS, đang để chưa tích. Hãy tích những máy khoa thực sự dùng.' : 'HIS không có mã máy nào ngoài các máy đã có trong bảng.') + goneNote;
+    const goneNote = r.gone ? ' Bỏ qua ' + r.gone + ' mã máy bạn đã xóa; muốn dùng lại thì bấm Cập nhật rồi gõ mã đó vào ô Thêm mã máy.' : '';
+    const staleNote = r.stale.length ? ' Bỏ ' + r.stale.length + ' mã máy HIS không còn cho chọn: ' + r.stale.slice(0, 6).join(', ') + (r.stale.length > 6 ? '…' : '') + '.' : '';
+    App.svMsg = err ? 'Không đọc được danh sách máy: ' + err : (r.added ? 'Đã thêm ' + r.added + ' mã máy từ HIS, đang để chưa tích. Hãy tích những máy khoa thực sự dùng.' : r.stale.length ? '' : 'Danh sách máy đã khớp với HIS.') + staleNote + goneNote;
+    const added = r.added + r.stale.length;
     log(App.svMsg); if (added) touch(); dirty();
   }
   function renderPerfFilter() { const v = $('#planPerf').value; $('#planPerf').innerHTML = '<option value="">Mọi người làm</option>' + S.staff.map(s => `<option value="${esc(s.id)}">${esc(s.ten)}</option>`).join(''); $('#planPerf').value = v; }
@@ -950,7 +994,7 @@ function XepGioCore(H, $) {
   $('#btnPlan').addEventListener('click', () => {
     buildPlan(null);
     const fx = fixGreen(), room = makeRoom(fx.back);
-    log(`Xếp giờ cả khoa: xếp ${planCount('planned')} ca, ${planCount('stuck')} ca kẹt.${movedNote(fx.moved)}${keptNote(fx.kept, fx.keptGone)}${roomNote(room)}${noRoomNote(fx.back)}`);
+    log(`Xếp giờ cả khoa: xếp ${planCount('planned')} ca, ${planCount('stuck')} ca kẹt.${movedNote(fx.moved, fx.swap)}${keptNote(fx.kept, fx.keptGone)}${roomNote(room)}${noRoomNote(fx.back)}`);
     runCheck(true);
   });
   $('#btnFill').addEventListener('click', () => askFill(null));
@@ -1122,7 +1166,7 @@ function XepGioCore(H, $) {
     if (fillStat(null).due) runFill(null, 0, true);
   }
   function clock() { App.plan.forEach(r => { r.wait = false; }); renderAll(); if (H.canFill && !H.noAuto && $('#autoFill').checked && !App.dirty) runFill(); }
-  return { S, D, App, X, boot, clock, tick, fillStat, changed, dirty, log, groupOf, mayList, staffName, staffById, ensureStaff, renderAll, showTab, cfg, staffEng, blocksEng, curRows, buildPlan, runFill, runGoAll, runCheck, runFix, runBn, autoBlocks, persist };
+  return { S, D, App, X, syncMay, boot, clock, tick, fillStat, changed, dirty, log, groupOf, mayList, staffName, staffById, ensureStaff, renderAll, showTab, cfg, staffEng, blocksEng, curRows, buildPlan, runFill, runGoAll, runCheck, runFix, runBn, autoBlocks, persist };
 }
 
 
@@ -1192,7 +1236,6 @@ shadow.innerHTML = '<style>' + CSS + `
       <h2>Xếp giờ thủ thuật</h2>
       <span class="muted" id="xgMsg"></span>
       <label for="xgDate">Ngày <input type="date" id="xgDate"></label>
-      <label for="xgNow" title="Để trống: app theo giờ của máy. Gõ giờ: ca kết thúc trước giờ này được điền thật vào HIS dù chưa tới giờ.">Giả Lập <input type="time" id="xgNow"></label>
       <button type="button" class="primary" id="xgLoad">Tải danh sách</button>
       <button type="button" id="xgSize">Mở rộng</button>
       <button type="button" id="xgMini">Thu gọn</button>
@@ -1215,17 +1258,12 @@ const store = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}')
 const weekDates = () => [-1, 0, 1, 2, 3, 4, 5].map(n => addDays(R.date, n));
 const onOf = lv => [[true, true], [true, false], [false, true], [false, false]][lv] || [true, true];
 const lvOf = on => on[0] && on[1] ? 0 : on[0] ? 1 : on[1] ? 2 : 3;
-// Ô "Giả Lập" ở thanh trên cùng: để trống thì app theo giờ của máy; gõ giờ thì app coi bây giờ là giờ đó khi xét ca nào được điền.
-// Đây là yêu cầu của chủ app. Giờ đã gõ được nhớ riêng trên từng máy (trong xepgio-ui); máy chưa ai gõ thì ô trống.
-// Ca được điền trước giờ kết thúc thật được đếm và ghi vào nhật ký; người bệnh còn phiếu CĐHA hoặc thủ thuật khoa khác chưa xong thì không điền trước (xem H.fill).
-const clockMin = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
-const simMin = () => X.toMin($('#xgNow').value);
 
 const H = {
   get tickets() { return R.tickets; }, get pats() { return R.pats; }, get missed() { return R.missed || []; }, get cdha() { return (R.cdha || {}).list || []; }, get ext() { return (R.cdha || {}).ext || []; },
   // Đọc lại giờ chẩn đoán hình ảnh của ngày chạy; trả về true nếu có giờ khác lần đọc trước
   async cdhaRefresh() { if (!R.pats || !R.pats.size) return false; const old = JSON.stringify(H.cdha); R.cdha = await fetchCdha(gridBase(), R.date, R.pats, R.own); return JSON.stringify(H.cdha) !== old; },
-  now() { const t = iso(new Date()); if (R.date < t) return 1440; if (R.date > t) return -1; const f = simMin(); return f != null ? f : clockMin(); },
+  now() { const t = iso(new Date()); if (R.date < t) return 1440; if (R.date > t) return -1; const d = new Date(); return d.getHours() * 60 + d.getMinutes(); },
   get dateLabel() { return vn(R.date); }, get runDate() { return R.date; }, canGo: true, canFill: true, strict: true,
   // Tự điền dần chỉ mở sau khi đã có ít nhất một ca được điền thành công trên máy này
   get noAuto() { return !store().autoOk; },
@@ -1256,22 +1294,19 @@ const H = {
     } catch (e) {}
   },
   /* ----- điền giờ: app mở form "Cập nhật PTTT" của HIS cho từng ca, điền rồi bấm "Lưu đóng", đúng như làm tay ----- */
-  // Khi ô Giả Lập đang đặt giờ muộn hơn giờ máy, hộp xác nhận nói rõ điều đó trước khi điền
-  get fillWarn() { const f = simMin(), c = clockMin(); return (R.date === iso(new Date()) && f != null && f > c ? 'Ô Giả Lập đang đặt ' + X.toHM(f) + ' trong khi giờ máy là ' + X.toHM(c) + ': ca nào kết thúc sau ' + X.toHM(c) + ' là ca chưa tới giờ thật và cũng được điền. ' : '') + 'App mở form "Cập nhật PTTT" của HIS cho từng ca, điền giờ, người làm, mã máy rồi bấm "Lưu đóng". Cảnh báo trùng của HIS được bấm Đồng ý và ghi vào nhật ký. Ca nào HIS từ chối thì app ghi lý do, bỏ qua ca đó và điền tiếp ca sau; 5 ca liên tiếp bị từ chối thì dừng.'; },
+  fillWarn: 'App mở form "Cập nhật PTTT" của HIS cho từng ca, điền giờ, người làm, mã máy rồi bấm "Lưu đóng". Cảnh báo trùng của HIS được bấm Đồng ý và ghi vào nhật ký. Ca nào HIS từ chối thì app ghi lý do, bỏ qua ca đó và điền tiếp ca sau; 5 ca liên tiếp bị từ chối thì dừng.',
   loadFilled() { return ((store().days || {})[R.date] || {}).filled || []; },
   onFilled(ids) { try { const st = store(); st.autoOk = true; st.days = st.days || {}; st.days[R.date] = Object.assign({}, st.days[R.date], { filled: ids }); localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) {} },
   fillNote() { const n = R.swept || 0; return n ? 'Dọn ' + n + ' form cũ của HIS.' : ''; },
   async fillBegin() {   // cho lưới của HIS hiện đủ mọi phiếu của ngày chạy trên một trang, để chọn được dòng cần điền
-    R.swept = 0; R.early = 0;
+    R.swept = 0;
     await query(gridBase(), 'NT.024.3.VS2', { MAUBENHPHAMID: '0', TRANGTHAI_CBOPHIEU: '' }, 1);   // thử một truy vấn nhỏ: phiên đăng nhập hết hạn thì báo ngay, không điền tiếp
     const $j = window.$, g = $j('#grdCK');
     R.keepF = { tu: $j('#txtTUNGAY').val(), den: $j('#txtDENNGAY').val(), tt: $j('#cboTRANGTHAIPHIEU').val(), rowNum: g.jqGrid('getGridParam', 'rowNum') };
     g.jqGrid('setGridParam', { rowNum: 3000 });
     await hisSearch(vn(R.date), vn(R.date), '');
   },
-  async fillEnd() { if (formsOpen()) { closeForm(); await waitFor(() => !formsOpen(), 8000); } sweepForms(); if (R.keepF) { const k = R.keepF; R.keepF = null; window.$('#grdCK').jqGrid('setGridParam', { rowNum: k.rowNum }); await hisSearch(k.tu, k.den, k.tt); }
-    if (R.early) { core.log(R.early + ' ca được điền khi chưa qua giờ kết thúc theo giờ máy (' + X.toHM(clockMin()) + '), do ô Giả Lập đang đặt ' + ($('#xgNow').value || 'trống') + '.'); R.early = 0; }
-  },
+  async fillEnd() { if (formsOpen()) { closeForm(); await waitFor(() => !formsOpen(), 8000); } sweepForms(); if (R.keepF) { const k = R.keepF; R.keepF = null; window.$('#grdCK').jqGrid('setGridParam', { rowNum: k.rowNum }); await hisSearch(k.tu, k.den, k.tt); } },
   afterFill(note) { setTimeout(refreshDay, 200); },   // đọc lại từ HIS để số liệu trên app khớp, giữ nguyên bảng giờ các ca chưa điền
   // Mở form "Cập nhật PTTT" của HIS cho một ca. Trả về '' nếu mở được, hoặc lý do không mở được.
   async openForm(t) {
@@ -1316,16 +1351,6 @@ const H = {
   },
   async fill(t, r, opt) {
     opt = opt || {};
-    // Ca chưa qua giờ kết thúc theo giờ máy, chỉ đủ điều kiện vì ô Giả Lập. Giờ chẩn đoán hình ảnh và giờ thủ thuật của khoa khác chỉ có trên HIS sau khi nơi đó làm xong,
-    // nên không điền trước cho người bệnh còn phiếu loại đó chưa xong hoặc app không đọc được: điền trước thì ca có thể trùng giờ với nơi kia.
-    const early = R.date === iso(new Date()) && simMin() != null && r.e > clockMin();
-    if (early) {
-      const c = R.cdha, no = err => ({ ok: false, skip: true, err });
-      if (!c || !c.tt) return no('chưa đọc được phiếu chẩn đoán hình ảnh và phiếu thủ thuật khoa khác từ HIS nên không điền trước giờ');
-      if ((c.pend || []).indexOf(t.bn) >= 0) return no('người bệnh còn phiếu chẩn đoán hình ảnh chưa thực hiện, chụp xong mới điền trước giờ được');
-      if ((c.ext || []).some(x => x.bn === t.bn && !x.done)) return no('người bệnh còn thủ thuật ở khoa, phòng khác chưa ghi hoàn thành, nơi đó cập nhật xong mới điền trước giờ được');
-      if ((c.bad || []).indexOf(t.bn) >= 0) return no('không đọc được phiếu chẩn đoán hình ảnh hoặc phiếu thủ thuật khoa khác của người bệnh này nên không điền trước giờ');
-    }
     const st = core.staffById(r.perf);
     if (!st || !st.uid) return { ok: false, skip: true, err: 'chưa có tài khoản HIS của người làm ' + core.staffName(r.perf) };
     const mbp = String(t.ref.MAUBENHPHAMID), dv = String(t.ref.DICHVUKHAMBENHID);
@@ -1382,7 +1407,6 @@ const H = {
       if (!x || timeOf(x.NGAYPHAUTHUATTHUTHUAT) !== r.s || timeOf(x.KETTHUCPTTT) !== r.e) return { ok: false, warned, err: 'HIS báo lưu thành công nhưng đọc lại giờ không khớp' };
     } catch (e) { return { ok: false, warned, err: 'đã bấm lưu nhưng không đọc lại được từ HIS để kiểm tra' }; }
     Object.assign(t, { tt: 3, vet: false, s: r.s, e: r.e, perf: r.perf, may: r.may || null });
-    if (early) R.early = (R.early || 0) + 1;
     return { ok: true, warned };
   },
 
@@ -1513,7 +1537,6 @@ async function fetchCdha(base, date, pats, own) {
   const d = vn(date), next = vn(addDays(date, 1)), list = [], todo = Array.from(pats.values()).filter(p => p.kb);
   const tt = { n: 0, bn: 0, wait: 0, err: 0 }, ttBn = new Set(), ext = [];
   let wait = 0, err = 0, i = 0;
-  const pend = new Set(), bad = new Set(Array.from(pats.values()).filter(p => !p.kb).map(p => p.bn));   // dùng cho ô Giả Lập: người còn phiếu CĐHA chưa thực hiện; người không đọc được phiếu
   const day = v => String(v || '').slice(0, 10);
   const worker = async () => {
     while (i < todo.length) {
@@ -1524,7 +1547,7 @@ async function fetchCdha(base, date, pats, own) {
           const dv = await queryN(base, 'NT.024.2', [ph.MAUBENHPHAMID], 100);
           dv.forEach(x => {
             const tra = x.THOIGIANTRAKETQUA1 || x.THOIGIANTRAKETQUA || '';
-            if (day(x.TGTHUCHIEN) !== d) { if (!x.TGTHUCHIEN && day(ph.NGAYMAUBENHPHAM) === d) { wait++; pend.add(p.bn); } return; }   // chưa thực hiện, hoặc thực hiện vào ngày khác
+            if (day(x.TGTHUCHIEN) !== d) { if (!x.TGTHUCHIEN && day(ph.NGAYMAUBENHPHAM) === d) wait++; return; }   // chưa thực hiện, hoặc thực hiện vào ngày khác
             const s = timeOf(x.TGTHUCHIEN); let e = day(tra) === d ? timeOf(tra) : null, open = false;
             if (e == null && (!tra || day(tra) === next)) { e = 1440; open = !tra; }   // đã thực hiện nhưng chưa trả kết quả (hoặc trả vào hôm sau): chặn tới hết ngày, lần đọc sau sẽ có giờ đúng
             if (s == null || e == null) return;
@@ -1532,7 +1555,7 @@ async function fetchCdha(base, date, pats, own) {
             list.push({ bn: p.bn, s, e, ten: String(x.TENDICHVU || '').trim(), open });   // open: còn chờ kết quả, ca kẹt vì dòng này được ghi chú "Chờ CĐHA"
           });
         }
-      } catch (e) { err++; bad.add(p.bn); }
+      } catch (e) { err++; }
       if (!own || !own.size) continue;
       try {
         const phieu = (await queryN(base, 'NT.024.DSPHIEUCLS', [p.kb, p.bn, LNMBP_PTTT, p.hs || ''], 1000)).filter(x => !own.has(String(x.MAUBENHPHAMID)) && (day(x.NGAYMAUBENHPHAM) === d || day(x.NGAYMAUBENHPHAM_HOANTHANH) === d));
@@ -1549,12 +1572,12 @@ async function fetchCdha(base, date, pats, own) {
             list.push({ bn: p.bn, s, e, ten, khoa }); tt.n++; ttBn.add(p.bn);
           });
         }
-      } catch (e) { tt.err++; bad.add(p.bn); }
+      } catch (e) { tt.err++; }
     }
   };
   await Promise.all([1, 2, 3, 4, 5].map(worker));
   tt.bn = ttBn.size;
-  return { list, wait, err, tt: own && own.size ? tt : null, ext, pend: Array.from(pend), bad: Array.from(bad) };
+  return { list, wait, err, tt: own && own.size ? tt : null, ext };
 }
 const cdhaNote = c => { if (!c) return ''; const cd = c.list.filter(x => x.khoa == null), t = c.tt, op = cd.filter(x => x.open).length;
   // Viết ngắn: "chặn giờ" là app tự chặn người bệnh trong giờ đó; "chờ kết quả" là đã làm nhưng HIS chưa có giờ trả; "chưa làm" là chưa có giờ để chặn
@@ -1664,12 +1687,14 @@ function learn() {
   const S = core.S, msgs = [], have = new Set(S.staff.map(p => p.id)), gone = new Set(S.gone || []), fresh = [];
   const add = (name, nhom) => { if (!name || have.has(name) || gone.has(name)) return; const p = { id: name, user: '', ten: name, nhom, can: {}, prio: {}, cc: {} }; S.staff.push(p); core.ensureStaff(p); have.add(name); fresh.push(name); };
   R.pats.forEach(p => add(p.bsId, 'Bác sĩ'));
+  // Mã máy chỉ được học từ phiếu cho thủ thuật chưa từng có mã máy nào (lần đầu dùng app). Thủ thuật đã có danh sách, hoặc người dùng đã xóa mã, thì không tự thêm:
+  // phiếu của ngày cũ còn mang mã cũ, tự thêm vào là app lại xếp ca vào máy HIS không còn cho chọn. Muốn cập nhật thì bấm Lấy danh sách máy từ HIS.
+  const noMay = new Set(S.groups.filter(g => !(S.may[g.k] || []).length && !(S.mayGone || []).some(m => m.indexOf(g.k + '|') === 0)).map(g => g.k));
   R.tickets.forEach(t => {
     const g = core.groupOf(t.ten);
     if (!g || g.skip) return;
     if (t.perf) { add(t.perf, ''); if (fresh.indexOf(t.perf) >= 0) { const p = S.staff.find(x => x.id === t.perf); p.can[g.k] = true; if (p.cc[g.cert]) p.cc[g.cert].co = true; } }   // người mới: tạm tích các thủ thuật họ đã đứng tên
-    // thủ thuật có mã máy trên HIS thì coi là cần máy; mã máy người dùng đã xóa ở thẻ Cài đặt (S.mayGone) thì không tự thêm lại
-    if (t.may && (S.mayGone || []).indexOf(g.k + '|' + t.may) < 0) { const key = g.k, a = S.may[key] = S.may[key] || []; if (a.indexOf(t.may) < 0) { a.push(t.may); a.sort(); } }
+    if (t.may && noMay.has(g.k)) { const key = g.k, a = S.may[key] = S.may[key] || []; if (a.indexOf(t.may) < 0) { a.push(t.may); a.sort(); } }   // thủ thuật có mã máy trên HIS thì coi là cần máy
   });
   // Ghép với tài khoản HIS theo họ tên: lấy tên đăng nhập, mã nhân viên (dùng khi điền) và nhóm chức danh
   const byName = new Map(); (R.users || []).forEach(u => { const k = norm(u.FULLNAME); byName.set(k, byName.has(k) ? null : u); });
@@ -1705,9 +1730,6 @@ function mount() {
   $('#xgSize').addEventListener('click', () => { ui.full = !ui.full; applyUi(); core.renderAll(); });
   $('#xgMini').addEventListener('click', () => { ui.mini = !ui.mini; applyUi(); });
   applyUi();
-  // Ô Giả Lập: nhớ giờ đã gõ trên máy này để lần mở sau có sẵn; đổi ô chỉ vẽ lại bảng, không tự điền
-  if (ui.now && X.toMin(ui.now) != null) $('#xgNow').value = ui.now;
-  $('#xgNow').addEventListener('change', () => { ui.now = $('#xgNow').value || ''; applyUi(); core.App.plan.forEach(r => { r.wait = false; }); core.renderAll(); });
   // Mỗi nửa phút: ca nào vừa qua giờ kết thúc thì điền (nếu đang bật tự điền), và ghi số ca còn chờ lên tên thẻ trình duyệt
   const title0 = document.title;
   setInterval(() => {
