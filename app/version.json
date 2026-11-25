@@ -1,14 +1,14 @@
 {
-  "version": "0.40",
+  "version": "0.41",
   "date": "2026-11-25",
   "files": [
     {
       "name": "xepgio-helper.js",
-      "sha256": "8ed3ed2d0cb8a8182a6559356dbeca47a73e2b8c357046bb4d642d5def9e63a8"
+      "sha256": "63a3ed13f353f1bdbe39454deaeaaa378f36108ba6caf4e460dc45375f1213b3"
     },
     {
       "name": "Huong-dan.html",
-      "sha256": "718d8dbf388abc1493a68f5600af7a4b23344bea120445efb0e9dba9b48d8d15"
+      "sha256": "0a6580771b8245d91320a77488a34de0ac003f53f068b1ff399ad44de1337d3e"
     }
   ],
   "exe": {

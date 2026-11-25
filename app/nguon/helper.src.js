@@ -6,7 +6,7 @@ if (window.top !== window) return;                           // chỉ gắn ở 
 if (window.__xepgio) return;                                 // đã gắn rồi thì thôi
 const cfg0 = window.__xepgioCfg || {};
 if (cfg0.host && location.hostname !== cfg0.host) return;    // chỉ chạy trên đúng địa chỉ HIS đã khai
-window.__xepgio = { version: '0.40' };
+window.__xepgio = { version: '0.41' };
 
 /*@ENGINE*/
 /*@CORE*/
@@ -77,6 +77,7 @@ shadow.innerHTML = '<style>' + CSS + `
       <h2>Xếp giờ thủ thuật</h2>
       <span class="muted" id="xgMsg"></span>
       <label for="xgDate">Ngày <input type="date" id="xgDate"></label>
+      <label for="xgNow" title="Để trống: app theo giờ của máy. Gõ giờ: ca kết thúc trước giờ này được điền thật vào HIS dù chưa tới giờ.">Giả Lập <input type="time" id="xgNow"></label>
       <button type="button" class="primary" id="xgLoad">Tải danh sách</button>
       <button type="button" id="xgSize">Mở rộng</button>
       <button type="button" id="xgMini">Thu gọn</button>
@@ -99,12 +100,17 @@ const store = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}')
 const weekDates = () => [-1, 0, 1, 2, 3, 4, 5].map(n => addDays(R.date, n));
 const onOf = lv => [[true, true], [true, false], [false, true], [false, false]][lv] || [true, true];
 const lvOf = on => on[0] && on[1] ? 0 : on[0] ? 1 : on[1] ? 2 : 3;
+// Ô "Giả Lập" ở thanh trên cùng: để trống thì app theo giờ của máy; gõ giờ thì app coi bây giờ là giờ đó khi xét ca nào được điền.
+// Đây là yêu cầu của chủ app. Giờ đã gõ được nhớ riêng trên từng máy (trong xepgio-ui); máy chưa ai gõ thì ô trống.
+// Ca được điền trước giờ kết thúc thật được đếm và ghi vào nhật ký; người bệnh còn phiếu CĐHA hoặc thủ thuật khoa khác chưa xong thì không điền trước (xem H.fill).
+const clockMin = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
+const simMin = () => X.toMin($('#xgNow').value);
 
 const H = {
   get tickets() { return R.tickets; }, get pats() { return R.pats; }, get missed() { return R.missed || []; }, get cdha() { return (R.cdha || {}).list || []; }, get ext() { return (R.cdha || {}).ext || []; },
   // Đọc lại giờ chẩn đoán hình ảnh của ngày chạy; trả về true nếu có giờ khác lần đọc trước
   async cdhaRefresh() { if (!R.pats || !R.pats.size) return false; const old = JSON.stringify(H.cdha); R.cdha = await fetchCdha(gridBase(), R.date, R.pats, R.own); return JSON.stringify(H.cdha) !== old; },
-  now() { const t = iso(new Date()); if (R.date < t) return 1440; if (R.date > t) return -1; const d = new Date(); return d.getHours() * 60 + d.getMinutes(); },
+  now() { const t = iso(new Date()); if (R.date < t) return 1440; if (R.date > t) return -1; const f = simMin(); return f != null ? f : clockMin(); },
   get dateLabel() { return vn(R.date); }, get runDate() { return R.date; }, canGo: true, canFill: true, strict: true,
   // Tự điền dần chỉ mở sau khi đã có ít nhất một ca được điền thành công trên máy này
   get noAuto() { return !store().autoOk; },
@@ -135,19 +141,22 @@ const H = {
     } catch (e) {}
   },
   /* ----- điền giờ: app mở form "Cập nhật PTTT" của HIS cho từng ca, điền rồi bấm "Lưu đóng", đúng như làm tay ----- */
-  fillWarn: 'App mở form "Cập nhật PTTT" của HIS cho từng ca, điền giờ, người làm, mã máy rồi bấm "Lưu đóng". Cảnh báo trùng của HIS được bấm Đồng ý và ghi vào nhật ký. Ca nào HIS từ chối thì app ghi lý do, bỏ qua ca đó và điền tiếp ca sau; 5 ca liên tiếp bị từ chối thì dừng.',
+  // Khi ô Giả Lập đang đặt giờ muộn hơn giờ máy, hộp xác nhận nói rõ điều đó trước khi điền
+  get fillWarn() { const f = simMin(), c = clockMin(); return (R.date === iso(new Date()) && f != null && f > c ? 'Ô Giả Lập đang đặt ' + X.toHM(f) + ' trong khi giờ máy là ' + X.toHM(c) + ': ca nào kết thúc sau ' + X.toHM(c) + ' là ca chưa tới giờ thật và cũng được điền. ' : '') + 'App mở form "Cập nhật PTTT" của HIS cho từng ca, điền giờ, người làm, mã máy rồi bấm "Lưu đóng". Cảnh báo trùng của HIS được bấm Đồng ý và ghi vào nhật ký. Ca nào HIS từ chối thì app ghi lý do, bỏ qua ca đó và điền tiếp ca sau; 5 ca liên tiếp bị từ chối thì dừng.'; },
   loadFilled() { return ((store().days || {})[R.date] || {}).filled || []; },
   onFilled(ids) { try { const st = store(); st.autoOk = true; st.days = st.days || {}; st.days[R.date] = Object.assign({}, st.days[R.date], { filled: ids }); localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) {} },
   fillNote() { const n = R.swept || 0; return n ? 'Dọn ' + n + ' form cũ của HIS.' : ''; },
   async fillBegin() {   // cho lưới của HIS hiện đủ mọi phiếu của ngày chạy trên một trang, để chọn được dòng cần điền
-    R.swept = 0;
+    R.swept = 0; R.early = 0;
     await query(gridBase(), 'NT.024.3.VS2', { MAUBENHPHAMID: '0', TRANGTHAI_CBOPHIEU: '' }, 1);   // thử một truy vấn nhỏ: phiên đăng nhập hết hạn thì báo ngay, không điền tiếp
     const $j = window.$, g = $j('#grdCK');
     R.keepF = { tu: $j('#txtTUNGAY').val(), den: $j('#txtDENNGAY').val(), tt: $j('#cboTRANGTHAIPHIEU').val(), rowNum: g.jqGrid('getGridParam', 'rowNum') };
     g.jqGrid('setGridParam', { rowNum: 3000 });
     await hisSearch(vn(R.date), vn(R.date), '');
   },
-  async fillEnd() { if (formsOpen()) { closeForm(); await waitFor(() => !formsOpen(), 8000); } sweepForms(); if (R.keepF) { const k = R.keepF; R.keepF = null; window.$('#grdCK').jqGrid('setGridParam', { rowNum: k.rowNum }); await hisSearch(k.tu, k.den, k.tt); } },
+  async fillEnd() { if (formsOpen()) { closeForm(); await waitFor(() => !formsOpen(), 8000); } sweepForms(); if (R.keepF) { const k = R.keepF; R.keepF = null; window.$('#grdCK').jqGrid('setGridParam', { rowNum: k.rowNum }); await hisSearch(k.tu, k.den, k.tt); }
+    if (R.early) { core.log(R.early + ' ca được điền khi chưa qua giờ kết thúc theo giờ máy (' + X.toHM(clockMin()) + '), do ô Giả Lập đang đặt ' + ($('#xgNow').value || 'trống') + '.'); R.early = 0; }
+  },
   afterFill(note) { setTimeout(refreshDay, 200); },   // đọc lại từ HIS để số liệu trên app khớp, giữ nguyên bảng giờ các ca chưa điền
   // Mở form "Cập nhật PTTT" của HIS cho một ca. Trả về '' nếu mở được, hoặc lý do không mở được.
   async openForm(t) {
@@ -192,6 +201,16 @@ const H = {
   },
   async fill(t, r, opt) {
     opt = opt || {};
+    // Ca chưa qua giờ kết thúc theo giờ máy, chỉ đủ điều kiện vì ô Giả Lập. Giờ chẩn đoán hình ảnh và giờ thủ thuật của khoa khác chỉ có trên HIS sau khi nơi đó làm xong,
+    // nên không điền trước cho người bệnh còn phiếu loại đó chưa xong hoặc app không đọc được: điền trước thì ca có thể trùng giờ với nơi kia.
+    const early = R.date === iso(new Date()) && simMin() != null && r.e > clockMin();
+    if (early) {
+      const c = R.cdha, no = err => ({ ok: false, skip: true, err });
+      if (!c || !c.tt) return no('chưa đọc được phiếu chẩn đoán hình ảnh và phiếu thủ thuật khoa khác từ HIS nên không điền trước giờ');
+      if ((c.pend || []).indexOf(t.bn) >= 0) return no('người bệnh còn phiếu chẩn đoán hình ảnh chưa thực hiện, chụp xong mới điền trước giờ được');
+      if ((c.ext || []).some(x => x.bn === t.bn && !x.done)) return no('người bệnh còn thủ thuật ở khoa, phòng khác chưa ghi hoàn thành, nơi đó cập nhật xong mới điền trước giờ được');
+      if ((c.bad || []).indexOf(t.bn) >= 0) return no('không đọc được phiếu chẩn đoán hình ảnh hoặc phiếu thủ thuật khoa khác của người bệnh này nên không điền trước giờ');
+    }
     const st = core.staffById(r.perf);
     if (!st || !st.uid) return { ok: false, skip: true, err: 'chưa có tài khoản HIS của người làm ' + core.staffName(r.perf) };
     const mbp = String(t.ref.MAUBENHPHAMID), dv = String(t.ref.DICHVUKHAMBENHID);
@@ -248,6 +267,7 @@ const H = {
       if (!x || timeOf(x.NGAYPHAUTHUATTHUTHUAT) !== r.s || timeOf(x.KETTHUCPTTT) !== r.e) return { ok: false, warned, err: 'HIS báo lưu thành công nhưng đọc lại giờ không khớp' };
     } catch (e) { return { ok: false, warned, err: 'đã bấm lưu nhưng không đọc lại được từ HIS để kiểm tra' }; }
     Object.assign(t, { tt: 3, vet: false, s: r.s, e: r.e, perf: r.perf, may: r.may || null });
+    if (early) R.early = (R.early || 0) + 1;
     return { ok: true, warned };
   },
 
@@ -378,6 +398,7 @@ async function fetchCdha(base, date, pats, own) {
   const d = vn(date), next = vn(addDays(date, 1)), list = [], todo = Array.from(pats.values()).filter(p => p.kb);
   const tt = { n: 0, bn: 0, wait: 0, err: 0 }, ttBn = new Set(), ext = [];
   let wait = 0, err = 0, i = 0;
+  const pend = new Set(), bad = new Set(Array.from(pats.values()).filter(p => !p.kb).map(p => p.bn));   // dùng cho ô Giả Lập: người còn phiếu CĐHA chưa thực hiện; người không đọc được phiếu
   const day = v => String(v || '').slice(0, 10);
   const worker = async () => {
     while (i < todo.length) {
@@ -388,7 +409,7 @@ async function fetchCdha(base, date, pats, own) {
           const dv = await queryN(base, 'NT.024.2', [ph.MAUBENHPHAMID], 100);
           dv.forEach(x => {
             const tra = x.THOIGIANTRAKETQUA1 || x.THOIGIANTRAKETQUA || '';
-            if (day(x.TGTHUCHIEN) !== d) { if (!x.TGTHUCHIEN && day(ph.NGAYMAUBENHPHAM) === d) wait++; return; }   // chưa thực hiện, hoặc thực hiện vào ngày khác
+            if (day(x.TGTHUCHIEN) !== d) { if (!x.TGTHUCHIEN && day(ph.NGAYMAUBENHPHAM) === d) { wait++; pend.add(p.bn); } return; }   // chưa thực hiện, hoặc thực hiện vào ngày khác
             const s = timeOf(x.TGTHUCHIEN); let e = day(tra) === d ? timeOf(tra) : null, open = false;
             if (e == null && (!tra || day(tra) === next)) { e = 1440; open = !tra; }   // đã thực hiện nhưng chưa trả kết quả (hoặc trả vào hôm sau): chặn tới hết ngày, lần đọc sau sẽ có giờ đúng
             if (s == null || e == null) return;
@@ -396,7 +417,7 @@ async function fetchCdha(base, date, pats, own) {
             list.push({ bn: p.bn, s, e, ten: String(x.TENDICHVU || '').trim(), open });   // open: còn chờ kết quả, ca kẹt vì dòng này được ghi chú "Chờ CĐHA"
           });
         }
-      } catch (e) { err++; }
+      } catch (e) { err++; bad.add(p.bn); }
       if (!own || !own.size) continue;
       try {
         const phieu = (await queryN(base, 'NT.024.DSPHIEUCLS', [p.kb, p.bn, LNMBP_PTTT, p.hs || ''], 1000)).filter(x => !own.has(String(x.MAUBENHPHAMID)) && (day(x.NGAYMAUBENHPHAM) === d || day(x.NGAYMAUBENHPHAM_HOANTHANH) === d));
@@ -413,12 +434,12 @@ async function fetchCdha(base, date, pats, own) {
             list.push({ bn: p.bn, s, e, ten, khoa }); tt.n++; ttBn.add(p.bn);
           });
         }
-      } catch (e) { tt.err++; }
+      } catch (e) { tt.err++; bad.add(p.bn); }
     }
   };
   await Promise.all([1, 2, 3, 4, 5].map(worker));
   tt.bn = ttBn.size;
-  return { list, wait, err, tt: own && own.size ? tt : null, ext };
+  return { list, wait, err, tt: own && own.size ? tt : null, ext, pend: Array.from(pend), bad: Array.from(bad) };
 }
 const cdhaNote = c => { if (!c) return ''; const cd = c.list.filter(x => x.khoa == null), t = c.tt, op = cd.filter(x => x.open).length;
   // Viết ngắn: "chặn giờ" là app tự chặn người bệnh trong giờ đó; "chờ kết quả" là đã làm nhưng HIS chưa có giờ trả; "chưa làm" là chưa có giờ để chặn
@@ -569,6 +590,9 @@ function mount() {
   $('#xgSize').addEventListener('click', () => { ui.full = !ui.full; applyUi(); core.renderAll(); });
   $('#xgMini').addEventListener('click', () => { ui.mini = !ui.mini; applyUi(); });
   applyUi();
+  // Ô Giả Lập: nhớ giờ đã gõ trên máy này để lần mở sau có sẵn; đổi ô chỉ vẽ lại bảng, không tự điền
+  if (ui.now && X.toMin(ui.now) != null) $('#xgNow').value = ui.now;
+  $('#xgNow').addEventListener('change', () => { ui.now = $('#xgNow').value || ''; applyUi(); core.App.plan.forEach(r => { r.wait = false; }); core.renderAll(); });
   // Mỗi nửa phút: ca nào vừa qua giờ kết thúc thì điền (nếu đang bật tự điền), và ghi số ca còn chờ lên tên thẻ trình duyệt
   const title0 = document.title;
   setInterval(() => {
