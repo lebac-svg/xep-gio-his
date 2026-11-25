@@ -685,7 +685,7 @@ function XepGioCore(H, $) {
     App.lock = new Set((sp.lock || []).filter(id => byId(id)));
     App.manual = new Map((sp.manual || []).filter(x => byId(x[0]))); App.skip = new Set((sp.skip || []).filter(id => byId(id)));
     const n = Array.from(App.plan.values()).filter(r => r.status === 'planned').length;
-    if (n) log('Đã lấy lại bảng giờ xếp từ trước: ' + n + ' ca dự kiến chưa điền.');
+    if (n) log('Lấy lại bảng giờ đã xếp: ' + n + ' ca chờ điền.');
   }
   // Chặn giờ cố định theo tuần: mỗi nhân viên một ô giờ chặn (07:30-08:30|13:00-14:00), áp dụng vào những thứ đã tích. Lưu trong cài đặt chung.
   const DOW = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật'];
@@ -838,10 +838,12 @@ function XepGioCore(H, $) {
     savePlan();
     return { placed: need0 - need1, moved: moved.length };
   }
-  const roomNote = r => !r ? '' : r.placed ? ` Để có chỗ cho ${r.placed} ca đang kẹt, app dời ${r.moved} ca đã xanh sang giờ khác; các ca này sẽ được ghi đè khi điền.` : ' App đã xem lại cả giờ của các ca đã xanh nhưng vẫn không đủ chỗ cho ca kẹt.';
-  const keptNote = (n, g) => !n ? '' : ' ' + n + ' ca xanh có lỗi được giữ nguyên: ' + [g ? g + ' ca vì HIS ghi người bệnh đã ra viện' : '', n - g ? (n - g) + ' ca vì HIS không cho ghi lại' : ''].filter(Boolean).join(', ') + '.';
+  // Nhật ký viết ngắn: mỗi dòng nêu việc đã làm và con số, không nhắc lại hướng dẫn. Các cụm "ca kẹt", "còn N lỗi", "từ chối", "không cho ghi lại"... được logBad dùng để tô đỏ, đổi chữ thì sửa cả ở đó.
+  const roomNote = r => !r ? '' : r.placed ? ` Dời ${r.moved} ca xanh để có chỗ cho ${r.placed} ca kẹt (ghi đè khi điền).` : ' Đã thử dời ca xanh nhưng vẫn thiếu chỗ cho ca kẹt.';
+  const keptNote = (n, g) => !n ? '' : ' Giữ nguyên ' + n + ' ca xanh có lỗi: ' + [g ? g + ' ca người bệnh đã ra viện' : '', n - g ? (n - g) + ' ca HIS không cho ghi lại' : ''].filter(Boolean).join(', ') + '.';
+  const movedNote = n => n ? ` Dời ${n} ca xanh có lỗi (ghi đè khi điền).` : '';
   // Ca xanh có lỗi mà không còn giờ trống phù hợp để dời: nói rõ để người dùng biết vì sao lỗi vẫn còn
-  const noRoomNote = back => { const n = (back || []).filter(id => !App.move.has(id)).length; return n ? ' ' + n + ' ca xanh có lỗi không còn giờ trống phù hợp để dời (người bệnh, người làm hoặc máy đã kín) nên giữ nguyên như trên HIS.' : ''; };
+  const noRoomNote = back => { const n = (back || []).filter(id => !App.move.has(id)).length; return n ? ' ' + n + ' ca xanh có lỗi không còn giờ trống để dời, giữ nguyên.' : ''; };
   const planCount = st => Array.from(App.plan.values()).filter(r => r.status === st).length;
   function runFix() {   // xếp lại các ca chưa điền, và xếp giờ mới cho ca xanh có lỗi
     if (!App.conflicts) runCheck(true);
@@ -849,7 +851,7 @@ function XepGioCore(H, $) {
     if (!before && !planCount('stuck')) { log('Không có ca nào cần sắp xếp lại.'); return; }   // còn ca kẹt thì vẫn thử xếp lại để lấy chỗ
     buildPlan(null);
     const fx = fixGreen(), room = makeRoom(fx.back), left = runCheck(true);
-    log(`Tự sắp xếp lại: trước đó có ${before} lỗi hoặc cảnh báo. ${fx.moved} ca đã xanh trên HIS được xếp giờ mới, sẽ ghi đè giờ cũ khi điền.${keptNote(fx.kept, fx.keptGone)}${roomNote(room)}${noRoomNote(fx.back)} Sau khi xếp: còn ${left} lỗi hoặc cảnh báo, ${planCount('stuck')} ca kẹt.`);
+    log(`Sắp xếp lại: trước ${before}, còn ${left} lỗi và cảnh báo; ${planCount('stuck')} ca kẹt.${movedNote(fx.moved)}${keptNote(fx.kept, fx.keptGone)}${roomNote(room)}${noRoomNote(fx.back)}`);
     if (H.canFill && !H.noAuto && $('#autoFill').checked) runFill();
   }
 
@@ -877,7 +879,7 @@ function XepGioCore(H, $) {
         const hit = new Set(); X.check(curRows(), staffEng(), cfg(), blocksEng()).forEach(c => { if (c.type === 'bblock') c.ids.forEach(id => { const t = byId(id), p = App.plan.get(id); if (t && p && p.status === 'planned' && t.tt !== 3) hit.add(t.bn); }); });
         if (hit.size) buildPlan(hit);
         App.conflicts = null;
-        log('Đã đọc lại giờ chẩn đoán hình ảnh và thủ thuật ở khoa khác từ HIS: có giờ mới.' + (hit.size ? ' Các ca chưa điền của ' + hit.size + ' người bệnh bị trùng giờ đã được xếp lại trước khi điền.' : ' Không ca chưa điền nào bị trùng.'));
+        log('CĐHA, thủ thuật khoa khác có giờ mới: ' + (hit.size ? 'xếp lại ca chưa điền của ' + hit.size + ' người bệnh bị trùng.' : 'không ca chưa điền nào bị trùng.'));
       }
     }
     const now = H.now();
@@ -901,17 +903,17 @@ function XepGioCore(H, $) {
       if (res.ok) {
         App.filled.add(r.id); App.move.delete(r.id); r.status = 'fixed'; r.wait = false; ok++; streak = [];
         if (H.onFilled) H.onFilled(Array.from(App.filled)); savePlan();
-        if (had) log(`${t.tenBN} · ${t.ten}: ghi đè ${had} thành ${hm(r.s)}–${hm(r.e)} ${staffName(r.perf)}${r.may ? ' ' + r.may : ''}`);
+        if (had) log(`${t.tenBN} · ${t.ten}: ghi đè ${had} → ${hm(r.s)}–${hm(r.e)} ${staffName(r.perf)}${r.may ? ' ' + r.may : ''}`);
       } else if (res.skip) { skip++; log(`${hm(r.s)} ${t.tenBN} · ${t.ten}: bỏ qua, ${res.err}`); }
       else if (t.tt === 3) {   // ca đã xanh mà HIS không cho ghi lại (ví dụ người bệnh đã ra viện): giữ nguyên như trên HIS, không thử lại, chạy tiếp
         keep++; App.move.delete(r.id); App.lock.add(r.id); streak.push({ id: r.id, row: Object.assign({}, r), green: true });
         App.plan.set(r.id, { id: r.id, s: t.s, e: t.e, may: t.may, perf: t.perf, status: 'fixed', note: '', wait: false });
-        log(`${hm(t.s)} ${t.tenBN} · ${t.ten}: HIS không cho ghi lại (${res.err || 'không lưu được'}), giữ nguyên như trên HIS`);
+        log(`${hm(t.s)} ${t.tenBN} · ${t.ten}: HIS không cho ghi lại (${res.err || 'không lưu được'}), giữ nguyên.`);
       }
       else {   // ca vàng HIS từ chối: ghi lý do vào bảng giờ, không thử lại cho tới lần xếp giờ sau, chạy tiếp
         fail++; streak.push({ id: r.id, row: Object.assign({}, r), green: false });
         r.status = 'stuck'; r.note = 'HIS từ chối: ' + (res.err || 'không lưu được'); r.wait = false;
-        log(`${hm(r.s)} ${t.tenBN} · ${t.ten}: HIS từ chối, ${res.err || 'không lưu được'}. Bỏ qua ca này.`);
+        log(`${hm(r.s)} ${t.tenBN} · ${t.ten}: HIS từ chối, ${res.err || 'không lưu được'}.`);
       }
       if (streak.length >= 5) {
         streak.forEach(x => { App.plan.set(x.id, x.row); if (x.green) { App.lock.delete(x.id); App.move.add(x.id); keep--; } else fail--; });
@@ -920,13 +922,13 @@ function XepGioCore(H, $) {
       if (i % 12 === 0) { renderTiles(); await sleep(0); }
     }
     try { if (H.fillEnd) await H.fillEnd(); } catch (e) {}
-    const note = `${App.stop ? 'Đã dừng theo lệnh. ' : ''}Điền ${ok} ca lúc ${now >= 1440 || now < 0 ? '' : hm(now)}${wait ? `, ${wait} ca chưa qua giờ kết thúc nên để lại` : ''}${skip ? `, ${skip} ca bỏ qua` : ''}${keep ? `, ${keep} ca xanh HIS không cho ghi lại nên giữ nguyên` : ''}${fail ? `, ${fail} ca HIS từ chối` : ''}. HIS báo trùng ${App.warn - w0} lần, app đã bấm Đồng ý.${err ? ' Dừng lại vì: ' + err + '.' : ''}`;
+    const note = `${App.stop ? 'Đã dừng. ' : ''}Điền ${ok} ca${now >= 1440 || now < 0 ? '' : ' lúc ' + hm(now)}${wait ? `, ${wait} ca chưa qua giờ kết thúc` : ''}${skip ? `, bỏ qua ${skip} ca` : ''}${keep ? `, ${keep} ca xanh HIS không cho ghi lại` : ''}${fail ? `, HIS từ chối ${fail} ca` : ''}.${App.warn - w0 ? ` HIS báo trùng ${App.warn - w0} lần, đã bấm Đồng ý.` : ''}${err ? ' Dừng vì: ' + err + '.' : ''}`;
     if (ok || fail || skip || keep || err) log(note);
     if (took.length >= 3 && H.fillNote) {   // chỉ ghi ở bản gắn vào HIS thật
       const sec = a => (a.reduce((n, x) => n + x, 0) / a.length / 1000).toFixed(1).replace('.', ',');
-      log(`Tốc độ điền: trung bình ${sec(took)} giây mỗi ca` + (took.length >= 20 ? `, 10 ca đầu ${sec(took.slice(0, 10))} giây, 10 ca cuối ${sec(took.slice(-10))} giây` : '') + '.' + (H.fillNote ? ' ' + H.fillNote() : ''));
+      log(`Tốc độ: ${sec(took)} giây/ca` + (took.length >= 20 ? `, 10 ca đầu ${sec(took.slice(0, 10))}, 10 ca cuối ${sec(took.slice(-10))}` : '') + '.' + (H.fillNote && H.fillNote() ? ' ' + H.fillNote() : ''));
     }
-    if (err) { App.autoStop = true; if (auto) log('Tự điền tạm dừng vì có lỗi. Xem lý do ở trên rồi bấm Điền vào HIS để chạy lại.'); }
+    if (err) { App.autoStop = true; if (auto) log('Tự điền tạm dừng vì lỗi ở trên. Bấm Điền vào HIS để chạy lại.'); }
     if (keep) App.replan = true;   // các ca chưa điền sẽ được xếp lại để né ca vừa giữ nguyên, sau khi số liệu được đọc lại từ HIS
     savePlan();
     App.running = false;
@@ -952,7 +954,7 @@ function XepGioCore(H, $) {
         if (was && H.onFilled) H.onFilled(Array.from(App.filled));
       } else {
         fail++; streak++; const m = r.err || 'HIS không gỡ được'; why[m] = (why[m] || 0) + 1;
-        if (fail <= 5) log(`${t.tenBN} · phiếu ${t.soPhieu || ''}: không gỡ được, ${m}. Để nguyên phiếu này.`);
+        if (fail <= 5) log(`${t.tenBN} · phiếu ${t.soPhieu || ''}: không gỡ được, ${m}.`);
         if (streak >= 5) err = '5 phiếu liên tiếp không gỡ được';
       }
       if (i % 12 === 0) { renderTiles(); await sleep(0); }
@@ -960,7 +962,7 @@ function XepGioCore(H, $) {
     try { if (H.goEnd) await H.goEnd(); } catch (e) {}
     savePlan();
     const reasons = Object.keys(why).map(m => why[m] + ' phiếu: ' + m).join('; ');
-    const note = `Đã gỡ xanh ${ok} trên ${list.length} phiếu${fail ? `, ${fail} phiếu HIS không cho gỡ nên để nguyên (${reasons})` : ''}${App.stop ? ', rồi dừng theo lệnh' : ''}${err ? '. Dừng lại vì: ' + err : ''}. Phiếu đã gỡ vẫn giữ giờ cũ trên HIS cho đến khi được điền lại.`;
+    const note = `Gỡ xanh ${ok}/${list.length} phiếu${fail ? `, ${fail} phiếu không gỡ được (${reasons})` : ''}${App.stop ? ', đã dừng' : ''}${err ? '. Dừng vì: ' + err : ''}. Phiếu đã gỡ vẫn giữ giờ cũ trên HIS.`;
     log(note);
     App.running = false; App.conflicts = null; renderAll();
     if (H.afterGo) H.afterGo(note);
@@ -978,8 +980,8 @@ function XepGioCore(H, $) {
       if (back.length) { back.forEach(id => App.move.delete(id)); res = buildPlan(scope); }
       green = bad.size - back.length; noRoom = back.length;
     }
-    const names = Array.from(scope).map(b => H.pats.get(b).ten).join(', ');
-    log(`Chạy riêng cho ${names}: ${res.filter(r => r.status === 'planned').length} ca đã xếp, ${res.filter(r => r.status === 'stuck').length} ca kẹt.${green ? ` Trong đó ${green} ca đã xanh trên HIS có lỗi được xếp giờ mới, sẽ ghi đè giờ cũ khi điền.` : ''}${noRoom ? ` ${noRoom} ca xanh có lỗi không còn giờ trống phù hợp để dời nên giữ nguyên như trên HIS.` : ''}`);
+    const names = scope.size > 3 ? scope.size + ' người bệnh' : Array.from(scope).map(b => H.pats.get(b).ten).join(', ');
+    log(`Chạy riêng ${names}: xếp ${res.filter(r => r.status === 'planned').length} ca, ${res.filter(r => r.status === 'stuck').length} ca kẹt.${movedNote(green)}${noRoom ? ` ${noRoom} ca xanh có lỗi không còn giờ trống để dời, giữ nguyên.` : ''}`);
     scope.forEach(b => App.sel.delete(b));   // chạy xong thì bỏ tích, lần sau tích người khác không bị lẫn
     if (H.canFill) closePop();
     renderAll(); askFill(scope);
@@ -1372,7 +1374,7 @@ function XepGioCore(H, $) {
   $('#btnPlan').addEventListener('click', () => {
     buildPlan(null);
     const fx = fixGreen(), room = makeRoom(fx.back);
-    log(`Xếp giờ cả khoa: ${planCount('planned')} ca đã xếp, ${planCount('stuck')} ca kẹt.${fx.moved ? ` Trong đó ${fx.moved} ca đã xanh trên HIS có lỗi được xếp giờ mới, sẽ ghi đè giờ cũ khi điền.` : ''}${keptNote(fx.kept, fx.keptGone)}${roomNote(room)}${noRoomNote(fx.back)}`);
+    log(`Xếp giờ cả khoa: xếp ${planCount('planned')} ca, ${planCount('stuck')} ca kẹt.${movedNote(fx.moved)}${keptNote(fx.kept, fx.keptGone)}${roomNote(room)}${noRoomNote(fx.back)}`);
     runCheck(true);
   });
   $('#btnFill').addEventListener('click', () => askFill(null));
@@ -1433,7 +1435,7 @@ function XepGioCore(H, $) {
     if (s == null || e == null || e <= s) { log('Chưa thêm được chặn giờ: giờ đến phải sau giờ từ.'); return; }
     D.blocks.push({ id: ++D.bkSeq, kind, who: $('#bkWho').value, s, e, note: kind === 'rv' ? 'Ra viện, xử trí' : kind === 'perf' ? 'Chặn người làm' : 'Chặn người bệnh', auto: false });
     $('#bkFind').value = '';
-    log('Đã thêm chặn giờ. Bấm Kiểm tra trùng để xem ca nào bị đụng.'); dirty();
+    log('Đã thêm chặn giờ. Bấm Kiểm tra trùng để soát lại.'); dirty();
   });
   $('#blocks').addEventListener('click', e => {
     const w = e.target.dataset.wkoff;

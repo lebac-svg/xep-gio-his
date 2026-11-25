@@ -6,7 +6,7 @@ if (window.top !== window) return;                           // chỉ gắn ở 
 if (window.__xepgio) return;                                 // đã gắn rồi thì thôi
 const cfg0 = window.__xepgioCfg || {};
 if (cfg0.host && location.hostname !== cfg0.host) return;    // chỉ chạy trên đúng địa chỉ HIS đã khai
-window.__xepgio = { version: '0.39' };
+window.__xepgio = { version: '0.40' };
 
 /*@ENGINE*/
 /*@CORE*/
@@ -138,7 +138,7 @@ const H = {
   fillWarn: 'App mở form "Cập nhật PTTT" của HIS cho từng ca, điền giờ, người làm, mã máy rồi bấm "Lưu đóng". Cảnh báo trùng của HIS được bấm Đồng ý và ghi vào nhật ký. Ca nào HIS từ chối thì app ghi lý do, bỏ qua ca đó và điền tiếp ca sau; 5 ca liên tiếp bị từ chối thì dừng.',
   loadFilled() { return ((store().days || {})[R.date] || {}).filled || []; },
   onFilled(ids) { try { const st = store(); st.autoOk = true; st.days = st.days || {}; st.days[R.date] = Object.assign({}, st.days[R.date], { filled: ids }); localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) {} },
-  fillNote() { const n = R.swept || 0; return n ? 'Đã dọn ' + n + ' form cũ mà HIS để lại trong bộ nhớ.' : ''; },
+  fillNote() { const n = R.swept || 0; return n ? 'Dọn ' + n + ' form cũ của HIS.' : ''; },
   async fillBegin() {   // cho lưới của HIS hiện đủ mọi phiếu của ngày chạy trên một trang, để chọn được dòng cần điền
     R.swept = 0;
     await query(gridBase(), 'NT.024.3.VS2', { MAUBENHPHAMID: '0', TRANGTHAI_CBOPHIEU: '' }, 1);   // thử một truy vấn nhỏ: phiên đăng nhập hết hạn thì báo ngay, không điền tiếp
@@ -421,11 +421,10 @@ async function fetchCdha(base, date, pats, own) {
   return { list, wait, err, tt: own && own.size ? tt : null, ext };
 }
 const cdhaNote = c => { if (!c) return ''; const cd = c.list.filter(x => x.khoa == null), t = c.tt, op = cd.filter(x => x.open).length;
-  return 'Chẩn đoán hình ảnh ngày ' + vn(R.date) + ': ' + (cd.length ? cd.length + ' dịch vụ của ' + new Set(cd.map(x => x.bn)).size + ' người bệnh đã có giờ thực hiện, app tự chặn giờ đó' : 'chưa có dịch vụ nào có giờ thực hiện') +
-    (op ? '; ' + op + ' dịch vụ trong đó đã làm nhưng chưa trả kết quả, app chặn người bệnh tới khi HIS có giờ trả (bảng Chặn giờ ghi "chờ kết quả")' : '') +
-    (c.wait ? '; ' + c.wait + ' dịch vụ chỉ định hôm nay chưa thực hiện nên chưa có giờ để chặn' : '') + (c.err ? '; không đọc được phiếu của ' + c.err + ' người bệnh' : '') + '.' +
-    (!t ? '' : ' Thủ thuật ở khoa, phòng khác: ' + (t.n ? t.n + ' ca của ' + t.bn + ' người bệnh đã ghi hoàn thành, app tự chặn giờ đó' : 'chưa có ca nào đã ghi hoàn thành') +
-      (t.wait ? '; ' + t.wait + ' ca chưa hoàn thành nên chưa có giờ để chặn' : '') + (t.n + t.wait ? '; Bảng giờ hiện đủ các ca này, app không xếp và không điền chúng' : '') + (t.err ? '; không đọc được phiếu thủ thuật của ' + t.err + ' người bệnh' : '') + '.'); };
+  // Viết ngắn: "chặn giờ" là app tự chặn người bệnh trong giờ đó; "chờ kết quả" là đã làm nhưng HIS chưa có giờ trả; "chưa làm" là chưa có giờ để chặn
+  return 'CĐHA: ' + ([cd.length ? 'chặn giờ ' + cd.length + ' dịch vụ của ' + new Set(cd.map(x => x.bn)).size + ' người bệnh' : '', op ? op + ' dịch vụ chờ kết quả' : '', c.wait ? c.wait + ' dịch vụ chưa làm' : '',
+    c.err ? 'không đọc được phiếu của ' + c.err + ' người bệnh' : ''].filter(Boolean).join(', ') || 'chưa có dịch vụ nào có giờ làm') + '.' +
+    (!t || !(t.n + t.wait + t.err) ? '' : ' Khoa khác: ' + [t.n ? 'chặn giờ ' + t.n + ' ca đã hoàn thành của ' + t.bn + ' người bệnh' : '', t.wait ? t.wait + ' ca chưa hoàn thành' : '', t.err ? 'không đọc được phiếu của ' + t.err + ' người bệnh' : ''].filter(Boolean).join(', ') + '.'); };
 const setMsg = s => { $('#xgMsg').textContent = s; };
 
 // Danh sách tài khoản nhân viên, lấy bằng đúng truy vấn mà ô "Người thực hiện" của form Cập nhật PTTT dùng (bệnh viện này cấu hình là PTTT.LOAD_USERID).
@@ -453,18 +452,16 @@ async function loadDay() {
   if (!date) { setMsg('Chưa chọn ngày.'); return; }
   R.loading = true; $('#xgLoad').disabled = true;
   try {
-    const d = vn(date), got = await fetchDay(date), tickets = got.tickets, pats = got.pats, list = got.list;
+    const d = vn(date), got = await fetchDay(date), tickets = got.tickets, pats = got.pats;
     R.tickets = tickets; R.pats = pats; R.date = date; R.cdha = got.cdha; R.own = got.own;
     core.boot(false);
     const learned = learn(); core.persist(); core.renderAll();
     learned.forEach(m => core.log(m));
-    core.log('Đã tải ngày ' + d + ': ' + list.length + ' phiếu, ' + tickets.length + ' thủ thuật của ' + pats.size + ' người bệnh; ' + Array.from(pats.values()).filter(p => p.vao != null).length + ' người bệnh mới vào trong ngày.');
-    const raN = Array.from(pats.values()).filter(p => p.ra).length, kinds = {};
-    pats.forEach(p => { const k = p.ttkb || 'trống'; kinds[k] = (kinds[k] || 0) + 1; });
-    core.log('Trạng thái người bệnh trên HIS: ' + Object.keys(kinds).map(k => '"' + k + '" ' + kinds[k] + ' người').join(', ') + '. ' + (raN ? raN + ' người đã ra viện: ca xanh của họ được giữ nguyên, không tự xếp lại.' : 'App không thấy ai đã ra viện.'));
-    core.log(got.cdha ? cdhaNote(got.cdha) : 'Chưa đọc được phiếu chẩn đoán hình ảnh và phiếu thủ thuật khoa khác từ HIS, nên app chưa tự chặn các giờ đó.');
+    const vaoN = Array.from(pats.values()).filter(p => p.vao != null).length, raN = Array.from(pats.values()).filter(p => p.ra).length;
+    core.log('Tải ngày ' + d + ': ' + tickets.length + ' thủ thuật của ' + pats.size + ' người bệnh' + (vaoN ? ', ' + vaoN + ' người mới vào' : '') + (raN ? ', ' + raN + ' người đã ra viện (giữ nguyên ca xanh của họ)' : '') + '.');
+    core.log(got.cdha ? cdhaNote(got.cdha) : 'Chưa đọc được phiếu CĐHA và thủ thuật khoa khác: app chưa tự chặn các giờ đó.');
     const none = tickets.filter(t => !core.groupOf(t.ten));
-    if (none.length) core.log('Có ' + none.length + ' ca thuộc thủ thuật chưa có quy tắc thời gian: ' + Array.from(new Set(none.map(t => t.ten))).join('; '));
+    if (none.length) core.log(none.length + ' ca chưa có quy tắc thời gian: ' + Array.from(new Set(none.map(t => t.ten))).join('; ') + '.');
     core.runCheck();
     if (R.note) { core.log(R.note); R.note = ''; }
     setMsg('Ngày ' + d + ': ' + tickets.length + ' thủ thuật');
@@ -485,7 +482,7 @@ async function loadMissed(date) {
     }
     if (R.date !== date) return;
     R.missed = out; core.renderAll();
-    if (out.length) core.log('Có ' + out.length + ' thủ thuật của 7 ngày trước chưa được cập nhật, xem bảng Phiếu sót.');
+    if (out.length) core.log('Phiếu sót: ' + out.length + ' thủ thuật của 7 ngày trước chưa cập nhật.');
   } catch (e) {}
 }
 // Người bệnh đã ra viện theo HIS: cột TRANGTHAIKHAMBENH của danh sách phiếu. Mã 9, hoặc chữ "kết thúc", "ra viện" được coi là đã ra viện.
@@ -546,10 +543,10 @@ function learn() {
     const u = byName.get(norm(p.id));
     if (u) { p.user = u.USERNAME || ''; p.uid = String(u.USER_ID); if (!p.nhom) p.nhom = nhomOf(u.CHUCDANH); } else if (u === null) amb.push(p.ten); else if (R.users) miss.push(p.ten);
   });
-  if (fresh.length) msgs.push('Đã thêm ' + fresh.length + ' người vào bảng nhân viên theo số liệu HIS: ' + fresh.join(', ') + '. Hãy xem lại bảng chứng chỉ ở thẻ Cài đặt.');
-  if (!R.users) msgs.push('Chưa lấy được danh sách tài khoản từ HIS, nên bảng nhân viên chưa có tên đăng nhập.');
-  if (miss.length) msgs.push('Không thấy tài khoản HIS trùng họ tên với: ' + miss.join(', ') + '.');
-  if (amb.length) msgs.push('Có hai tài khoản HIS cùng họ tên, chưa xác định được tài khoản của: ' + amb.join(', ') + '. Vào Chấm công, bấm Cập nhật danh sách, gõ tên rồi chọn đúng tài khoản.');
+  if (fresh.length) msgs.push('Thêm ' + fresh.length + ' nhân viên từ HIS: ' + fresh.join(', ') + '. Xem lại chứng chỉ ở thẻ Cài đặt.');
+  if (!R.users) msgs.push('Chưa lấy được danh sách tài khoản HIS: nhân viên chưa có tên đăng nhập.');
+  if (miss.length) msgs.push('Không thấy tài khoản HIS của: ' + miss.join(', ') + '.');
+  if (amb.length) msgs.push('Có hai tài khoản HIS trùng tên: ' + amb.join(', ') + '. Vào Chấm công, bấm Cập nhật danh sách để chọn đúng tài khoản.');
   return msgs;
 }
 
@@ -600,7 +597,7 @@ function mount() {
       const ok = await waitFor(() => { try { gridBase(); return true; } catch (e) { return false; } }, 90000);
       if (!ok) return;
       $('#xgDate').value = rs.date; await loadDay();
-      core.log('Đã tải lại trang HIS để giữ phiên đăng nhập, app chạy tiếp theo bảng giờ đã xếp.');
+      core.log('Đã tải lại trang HIS để giữ phiên đăng nhập, app chạy tiếp.');
     })();
   } else {
     // Thẻ này vừa mở màn Quản lý PTTT trong lúc hôm nay app đang chạy dở: nếu không có thẻ nào khác đang chạy thì thẻ này chạy tiếp
@@ -609,7 +606,7 @@ function mount() {
       const ok = await waitFor(() => { try { gridBase(); return true; } catch (e) { return false; } }, 90000);
       if (!ok || otherHolds()) return;
       $('#xgDate').value = lv.date; await loadDay();
-      core.log('App tự chạy tiếp theo bảng giờ đã xếp hôm nay.');
+      core.log('App chạy tiếp bảng giờ đã xếp hôm nay.');
     })();
   }
 }
